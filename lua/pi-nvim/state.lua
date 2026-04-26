@@ -121,4 +121,46 @@ function M.clear_all_diffs()
   end
 end
 
+function M.update_from_state(state_data)
+  -- Update state from get_state RPC response
+  if state_data.model then
+    M.model = state_data.model
+  end
+  if state_data.thinkingLevel then
+    M.thinking_level = state_data.thinkingLevel
+  end
+  if state_data.isStreaming ~= nil then
+    M.streaming = state_data.isStreaming
+  end
+  if state_data.isCompacting ~= nil then
+    M.is_compacting = state_data.isCompacting
+  end
+  if state_data.sessionFile then
+    M.session_file = state_data.sessionFile
+  end
+  if state_data.sessionId then
+    M.session_id = state_data.sessionId
+  end
+  if state_data.sessionName then
+    M.session_name = state_data.sessionName
+  end
+  if state_data.messageCount then
+    M.message_count = state_data.messageCount
+  end
+  if state_data.pendingMessageCount then
+    M.pending_message_count = state_data.pendingMessageCount
+  end
+end
+
+function M.get_model_display()
+  if M.model and M.model.name then
+    return M.model.name
+  end
+  return 'unknown'
+end
+
+function M.is_active()
+  return M.connected and (M.streaming or M.thinking)
+end
+
 return M
