@@ -3,7 +3,6 @@
 
 local state = require('pi-nvim.state')
 local config = require('pi-nvim.config')
-local session = require('pi-nvim.session')
 
 local M = {}
 
