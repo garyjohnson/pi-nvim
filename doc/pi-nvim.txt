@@ -1,0 +1,133 @@
+*pi-nvim*  A neovim plugin for the pi coding agent
+
+===============================================================================
+π π π π π π π π π π π π π π π π π π π π π π π π π π π π π π π π π π π π π π
+
+INTRODUCTION                                                         *pi-nvim*
+
+pi-nvim integrates the π coding agent as a first-class neovim citizen.
+The human editor and the LLM have equal focus - toggle between neovim-only,
+split view, and π-fullscreen layouts.
+
+This plugin requires the π CLI to be installed:
+>
+  npm install -g @mare zechner/pi-coding-agent
+<
+===============================================================================
+π π π π π π π π π π π π π π π π π π π π π π π π π π π π π π π π π π π π π π
+
+REQUIREMENTS                                                         *pi-nvim-requirements*
+
+- Neovim 0.10 or later
+- Node.js and npm
+- π CLI: `npm install -g @mariozechner/pi-coding-agent`
+- An API key for your LLM provider (Anthropic, OpenAI, etc.)
+
+===============================================================================
+π π π π π π π π π π π π π π π π π π π π π π π π π π π π π π π π π π π π π π
+
+INSTALLATION                                                         *pi-nvim-install*
+
+Using lazy.nvim:
+>
+  { 'yourname/nvim-pi-thing', config = function() require('pi-nvim').setup() end }
+<
+Using vim-plug:
+>
+  Plug 'yourname/nvim-pi-thing'
+<
+===============================================================================
+π π π π π π π π π π π π π π π π π π π π π π π π π π π π π π π π π π π π π π
+
+COMMANDS                                                             *pi-nvim-commands*
+
+:P iToggle         Toggle π split view on/off
+:P iFullscreen     Toggle π fullscreen
+:P iSendSelection Send selection to π (also in visual mode)
+:P iNewSession     Start new π session
+:P iResume         Resume or select a session
+:P iRestart        Restart π process
+:P iAbort          Abort current operation
+:P iJumpInput      Jump to π input buffer
+:P iJumpOutput     Jump to π chat buffer
+:P iDiffClear      Clear diff decorations
+:P iStatus         Show π status
+:P iFollowUp       Send follow-up message (after π finishes)
+
+===============================================================================
+π π π π π π π π π π π π π π π π π π π π π π π π π π π π π π π π π π π π π π
+
+KEYBINDINGS                                                         *pi-nvim-keybindings*
+
+<leader>pt    Toggle π split view
+<leader>pf    Toggle π fullscreen
+<leader>ps    Send selection to π
+<leader>pn    New π session
+<leader>pr    Resume/switch session
+<leader>pa    Abort current operation
+<leader>pi    Jump to π input
+<leader>po    Jump to π output
+<leader>pd    Clear diff decorations
+
+In the π input buffer:
+<CR>       Send prompt (steer if π is working)
+<S-CR>     Insert new line
+<Esc>      Jump back to previous window
+<C-C>      Clear input buffer
+
+===============================================================================
+π π π π π π π π π π π π π π π π π π π π π π π π π π π π π π π π π π π π π π
+
+CONFIGURATION                                                        *pi-nvim-config*
+
+>
+  require('pi-nvim').setup({
+    layout = 'adaptive',       -- 'vertical', 'horizontal', 'adaptive'
+    split_width = 50,
+    split_height = 20,
+    session_resume = 'ask',    -- 'new', 'continue', 'ask'
+    input_autoinsert = true,
+    send_key = '<CR>',
+    auto_save = 'ask',        -- 'always', 'never', 'ask'
+    diff_auto_open = true,
+    diff_highlight = true,
+    keys = {
+      toggle = '<leader>pt',
+      fullscreen = '<leader>pf',
+      send_selection = '<leader>ps',
+      new_session = '<leader>pn',
+      resume = '<leader>pr',
+      abort = '<leader>pa',
+      jump_input = '<leader>pi',
+      jump_output = '<leader>po',
+      clear_diffs = '<leader>pd',
+    },
+  })
+<
+===============================================================================
+π π π π π π π π π π π π π π π π π π π π π π π π π π π π π π π π π π π π π π
+
+LUALINE INTEGRATION                                                  *pi-nvim-lualine*
+
+>
+  require('lualine').setup({
+    sections = {
+      lualine_c = {
+        function() return require('pi-nvim.ui.status').get_status_line() end,
+      },
+    },
+  })
+<
+===============================================================================
+π π π π π π π π π π π π π π π π π π π π π π π π π π π π π π π π π π π π π π
+
+ABOUT                                                               *pi-nvim-about*
+
+π is a minimal terminal coding harness. See https://pi.dev for details.
+
+pi-nvim integrates π with neovim, giving the human editor and the LLM equal
+focus in the editor.
+
+License: MIT
+
+vim:tw=78:ts=8:sw=8:noet:ft=help:norl:
