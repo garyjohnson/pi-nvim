@@ -1,8 +1,10 @@
 {
   "name": "pi-nvim",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "pi coding agent extension for Neovim — provides commands and utilities",
-  "keywords": ["pi-extension"],
+  "keywords": [
+    "pi-extension"
+  ],
   "type": "module",
   "devDependencies": {
     "standard-version": "^9.5.0"
