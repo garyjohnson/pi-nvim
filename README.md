@@ -6,7 +6,7 @@ A Neovim plugin for the [pi coding agent](https://pi.dev).
 
 ## Summary
 
-pi-nvim integrates the pi coding agent as a first-class Neovim citizen. The human editor and the LLM have equal focus — toggle between Neovim-only, split view, and pi-fullscreen layouts.
+Runs the pi coding agent in a vertical terminal split within Neovim.
 
 ## Requirements
 
@@ -20,45 +20,15 @@ Using a plugin manager like [lazy.nvim](https://github.com/folke/lazy.nvim):
 ```lua
 {
   "garyjohnson/pi-nvim",
-  ft = { "lua", "typescript", "typescriptreact", "javascript", "javascriptreact" },
-  cmd = { "PiSplit", "PiFullscreen", "PiChat", "PiTerminal" },
+  cmd = { "PiSplit" },
 }
 ```
 
 ## Usage
 
-Start pi in split view:
-
 ```vim
 :PiSplit
 ```
-
-Run in fullscreen mode:
-
-```vim
-:PiFullscreen
-```
-
-Open the chat interface:
-
-```vim
-:PiChat
-```
-
-Open a terminal for pi commands:
-
-```vim
-:PiTerminal
-```
-
-## Commands
-
-| Command | Description |
-|---------|-------------|
-| `:PiSplit` | Split window with pi |
-| `:PiFullscreen` | Fullscreen pi view |
-| `:PiChat` | Chat interface |
-| `:PiTerminal` | Terminal with pi |
 
 ## Development
 
