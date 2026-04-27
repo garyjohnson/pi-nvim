@@ -1,4 +1,6 @@
 .firecrawl
+node_modules/
+bun.lockb
 
 # Extension dependencies
 extension/node_modules/

@@ -3,8 +3,7 @@
     "lua/**/*",
     "plugin/**/*",
     "tests/**/*",
-    "Makefile",
-    "README.md"
+    "Makefile"
   ],
   "excludePatterns": [
     "**/.git",
@@ -33,6 +32,6 @@
   ],
   "release": {
     "type": "prompt",
-    "content": "Commit changes and push."
+    "content": "First rebase on latest main, then commit changes. If we're already on a feature branch with an existing PR, update that PR. Otherwise, create a new PR. Include the output of './scripts/session-stats.sh --latest' in the PR body."
   }
 }
