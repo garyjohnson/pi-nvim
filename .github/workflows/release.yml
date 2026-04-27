@@ -27,6 +27,14 @@ jobs:
       - name: Install dependencies
         run: bun install
 
+      - name: Install Neovim
+        run: |
+          curl -LO https://github.com/neovim/neovim/releases/download/v0.11.1/nvim-linux-x86_64.appimage
+          chmod u+x nvim-linux-x86_64.appimage
+          ./nvim-linux-x86_64.appimage --appimage-extract
+          sudo mv squashfs-root /opt/nvim
+          sudo ln -sf /opt/nvim/usr/bin/nvim /usr/local/bin/nvim
+
       - name: Run tests
         run: make test
 
