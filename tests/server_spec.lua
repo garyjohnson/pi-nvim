@@ -93,4 +93,16 @@ describe("pi-nvim server", function()
     -- In headless mode, the edit command may not work, but the handler should not error
     assert.is_not.Nil(result)
   end)
+
+  it("handlers can be called (verifies nvim_list_bufs works in scheduled context)", function()
+    handlers.register_all()
+
+    -- Verify the state handler works - this exercises the same code paths
+    -- (nvim_list_bufs, nvim_get_mode, etc.) that would fail in fast event context.
+    -- The fix ensures socket dispatch wraps handlers in vim.schedule.
+    local result = handlers.state({})
+    eq("n", result.mode)
+    eq("table", type(result.buffers))
+    eq("table", type(result.windows))
+  end)
 end)

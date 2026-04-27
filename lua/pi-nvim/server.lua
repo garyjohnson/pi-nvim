@@ -81,20 +81,27 @@ local function dispatch(data)
     end
 
     local params = msg.params or {}
-    local ok_handler, result = pcall(handler, params)
-    if not ok_handler then
-      log(vim.log.levels.ERROR, string.format("Handler error for %s: %s", msg.method, result))
-      M.send_error(msg.id, -32603, string.format("Internal error: %s", result))
-      return
-    end
+    local request_id = msg.id
 
-    -- Handler may return (result, error) where error is a table {code, message}
-    if type(result) == "table" and result.__nvim_error then
-      local err = result.__nvim_error
-      M.send_error(msg.id, err.code, err.message)
-    else
-      M.send_result(msg.id, result)
-    end
+    -- Schedule handler to run in main Neovim event loop to avoid
+    -- "fast event context" errors when calling nvim_list_bufs,
+    -- nvim_get_mode, and other APIs that aren't allowed in callbacks.
+    vim.schedule(function()
+      local ok_handler, result = pcall(handler, params)
+      if not ok_handler then
+        log(vim.log.levels.ERROR, string.format("Handler error for %s: %s", msg.method, result))
+        M.send_error(request_id, -32603, string.format("Internal error: %s", result))
+        return
+      end
+
+      -- Handler may return (result, error) where error is a table {code, message}
+      if type(result) == "table" and result.__nvim_error then
+        local err = result.__nvim_error
+        M.send_error(request_id, err.code, err.message)
+      else
+        M.send_result(request_id, result)
+      end
+    end)
   else
     M.send_error(msg.id, -32600, "Invalid request: no method")
   end
