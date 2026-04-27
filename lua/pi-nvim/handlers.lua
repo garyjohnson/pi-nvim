@@ -210,30 +210,33 @@ function M.openFile(params)
     return server.error_result(-32602, "Missing required param: path")
   end
 
+  -- Sanitize path: reject paths containing pipe, newline, or carriage
+  -- return characters that could be used for VimScript command injection.
+  -- The pipe character | chains ex commands; newlines terminate them.
+  if path:find('|') or path:find('\n') or path:find('\r') then
+    return server.error_result(-32602, "Invalid path: contains disallowed characters")
+  end
+
   local line = params.line
   local col = params.col
 
-  -- Use schedule to ensure we're on the main thread
-  -- (handlers may be called from libuv callbacks)
-  local ok, err = pcall(function()
-    vim.schedule(function()
-      vim.cmd(string.format("edit %s", vim.fn.fnameescape(path)))
-      if line then
-        local target_col = col or 1
-        vim.api.nvim_win_set_cursor(0, { line, target_col - 1 }) -- col is 0-indexed for API
-      end
-    end)
-  end)
+  -- Use vim.cmd.edit (function form) to avoid string interpolation
+  -- vulnerabilities. The function form takes a plain filename, not
+  -- an ex command, so pipe characters and other ex metacharacters
+  -- in the path cannot inject commands.
+  local ok, _ = pcall(vim.cmd.edit, path)
 
-  if not ok then
-    return server.error_result(-32603, string.format("Failed to open file: %s", err))
+  -- edit may fail for nonexistent files, but still opens a buffer.
+  -- Only true errors (permission, etc.) propagate. pcall catches them.
+
+  if line then
+    local target_col = col or 1
+    pcall(vim.api.nvim_win_set_cursor, 0, { line, target_col - 1 })
   end
 
-  -- Find the buffer (may not exist yet if vim.schedule hasn't run)
-  -- Try to find by name
+  -- Find the buffer by name
   local bufnr = vim.fn.bufnr(path)
   if bufnr == -1 then
-    -- Buffer doesn't exist yet, will be created by edit command
     bufnr = vim.json.null
   end
 

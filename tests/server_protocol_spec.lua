@@ -122,4 +122,18 @@ describe("pi-nvim server protocol", function()
     assert.is_not.Nil(result.__nvim_error)
     eq(-32602, result.__nvim_error.code)
   end)
+
+  it("openFile rejects paths with pipe character", function()
+    local result = handlers.openFile({ path = "foo.lua|!rm -rf /" })
+    assert.is_not.Nil(result.__nvim_error)
+    eq(-32602, result.__nvim_error.code)
+    -- Verify the error message mentions disallowed characters
+    assert.is_not.Nil(result.__nvim_error.message:find("disallowed"))
+  end)
+
+  it("openFile rejects paths with newline", function()
+    local result = handlers.openFile({ path = "foo.lua\nmalicious" })
+    assert.is_not.Nil(result.__nvim_error)
+    eq(-32602, result.__nvim_error.code)
+  end)
 end)
