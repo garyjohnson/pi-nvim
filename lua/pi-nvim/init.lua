@@ -91,6 +91,9 @@ function M.open_split()
   vim.fn.termopen(pi_cmd, term_opts)
   pi_bufnr = vim.api.nvim_get_current_buf()
 
+  -- Hide the pi buffer from the buffer list (tab bar)
+  vim.bo[pi_bufnr].buflisted = false
+
   -- Auto-enter insert mode in the pi terminal whenever it gains focus
   vim.api.nvim_create_autocmd("BufWinEnter", {
     buffer = pi_bufnr,

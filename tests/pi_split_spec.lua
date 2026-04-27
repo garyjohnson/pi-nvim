@@ -18,6 +18,9 @@ describe('PiSplit', function()
     -- The current buffer should be a terminal
     local bufnr = vim.api.nvim_get_current_buf()
     assert.equals('terminal', vim.bo[bufnr].buftype)
+
+    -- The buffer should be hidden from the buffer list (tab bar)
+    assert.equals(false, vim.bo[bufnr].buflisted)
   end)
 
   it('should jump focus to an existing pi terminal instead of spawning a second buffer', function()
@@ -40,6 +43,9 @@ describe('PiSplit', function()
     pi.open_split()
     local buf = vim.api.nvim_get_current_buf()
 
+    -- The buffer should still be unlisted after reopening
+    assert.equals(false, vim.bo[buf].buflisted)
+
     -- Close the window (hide the buffer)
     vim.cmd('close')
 
@@ -50,5 +56,8 @@ describe('PiSplit', function()
     -- Should create a new window for the existing buffer
     assert.equals(win_count_before + 1, #vim.api.nvim_tabpage_list_wins(0))
     assert.equals(buf, vim.api.nvim_get_current_buf())
+
+    -- The buffer should still be unlisted after reopening
+    assert.equals(false, vim.bo[buf].buflisted)
   end)
 end)
