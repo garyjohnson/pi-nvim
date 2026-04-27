@@ -1,1 +1,8 @@
 .firecrawl
+
+# Extension dependencies
+extension/node_modules/
+extension/dist/
+
+# OS files
+.DS_Store

@@ -1,0 +1,17 @@
+{
+  "name": "pi-nvim-extension",
+  "version": "0.1.0",
+  "description": "Pi extension that connects to neovim via unix socket to expose editor state as custom tools",
+  "private": true,
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "typebox": "^1.0.0"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.0.0",
+    "typescript": "^5.5.0"
+  }
+}
