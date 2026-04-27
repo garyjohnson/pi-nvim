@@ -56,8 +56,8 @@ require("pi-nvim").setup({
   split_direction = "vertical",
 
   -- Whether to show an inline git diff when opening a file tracked by git.
-  -- When enabled along with open_in_split, shows diff between working copy
-  -- and HEAD version in adjacent splits.
+  -- When enabled, opens the file (optionally in split) and shows git diff
+  -- output in a separate buffer above the working copy.
   show_git_diff = false,
 })
 ```
@@ -66,7 +66,7 @@ require("pi-nvim").setup({
 
 When `open_in_split = true`, file edits from pi open in a new split window instead of replacing the current buffer.
 
-When `show_git_diff = true` and the file is tracked by git, pi opens two splits side-by-side: one with the working copy and one with the HEAD version, with diff highlighting enabled.
+When `show_git_diff = true` and the file is tracked by git, pi shows the `git diff` output inline in a separate buffer above the working copy.
 
 ## Development
 

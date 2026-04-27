@@ -273,70 +273,54 @@ function M.openFile(params)
   local split_dir = cfg.split_direction or "vertical"
   local show_diff = cfg.show_git_diff
 
-  -- Handle split and diff mode
-  local working_bufnr = nil
-  local git_bufnr = nil
-
   if use_split or show_diff then
     -- Check if we can show git diff
     local can_show_diff = show_diff and is_git_repo(path)
-    local git_content = nil
-
+    local diff_output = nil
 
     if can_show_diff then
-      git_content = get_git_version(path)
-      can_show_diff = git_content ~= nil
+      -- Get inline git diff output
+      local cmd = string.format("cd %s && git diff --no-color 2>/dev/null", vim.fn.shellescape(vim.fn.fnamemodify(path, ":p:h")))
+      diff_output = vim.fn.system(cmd)
+      if vim.v.shell_error ~= 0 or diff_output == "" then
+        diff_output = nil
+        can_show_diff = false
+      end
     end
 
-    -- Create the split(s)
-    if can_show_diff then
-      -- Two splits: one for working copy, one for git version
+    -- Open the file first (optionally in a split)
+    if use_split then
       if split_dir == "horizontal" then
         vim.cmd("split")
-        vim.cmd("split")
       else
         vim.cmd("vsplit")
-        vim.cmd("vsplit")
       end
+    end
 
-      -- In the first split, load the working copy (will be on the right/bottom)
-      pcall(vim.cmd.edit, path)
-      working_bufnr = vim.api.nvim_get_current_buf()
-      vim.opt_local.diff = true
+    pcall(vim.cmd.edit, path)
 
-      -- Move to the other split and load git version
-      vim.cmd("wincmd w")
-      vim.api.nvim_buf_set_lines(0, 0, -1, false, vim.fn.split(git_content, '\n'))
-      vim.bo[0].filetype = vim.bo[working_bufnr].filetype
-      vim.opt_local.diff = true
-      git_bufnr = vim.api.nvim_get_current_buf()
+    if line then
+      local target_col = col or 1
+      pcall(vim.api.nvim_win_set_cursor, 0, { line, target_col - 1 })
+    end
 
-      -- Position cursor at the correct line in the working copy
-      if line then
-        pcall(vim.api.nvim_win_set_cursor, 0, { line, (col or 1) - 1 })
-      end
-    else
-      -- Just open in a split (no git diff or no git version available)
-      if use_split then
-        if split_dir == "horizontal" then
-          vim.cmd("split")
-        else
-          vim.cmd("vsplit")
-        end
-        pcall(vim.cmd.edit, path)
+    -- If we have diff output, create a new buffer with inline diff
+    if can_show_diff and diff_output then
+      -- Split off a new window for the diff
+      vim.cmd("split")
 
-        if line then
-          local target_col = col or 1
-          pcall(vim.api.nvim_win_set_cursor, 0, { line, target_col - 1 })
-        end
-      else
-        -- Fallback to regular edit if no split needed
-        pcall(vim.cmd.edit, path)
-        if line then
-          local target_col = col or 1
-          pcall(vim.api.nvim_win_set_cursor, 0, { line, target_col - 1 })
-        end
-      end
+      -- Set the diff content in the new buffer
+      local diff_lines = vim.fn.split(diff_output, '\n', { trimempty = true })
+      vim.api.nvim_buf_set_lines(0, 0, -1, false, diff_lines)
+
+      -- Set filetype to diff
+      vim.bo[0].filetype = "diff"
+
+      -- Make it read-only
+      vim.bo[0].modifiable = false
+
+      -- Position at the first hunk
+      vim.cmd("normal! gg")
     end
   else
     -- Original behavior: edit in current window
