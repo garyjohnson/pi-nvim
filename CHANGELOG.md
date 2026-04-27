@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.1.3](https://github.com/garyjohnson/pi-nvim/compare/v0.1.2...v0.1.3) (2026-04-27)
+
+
+### Bug Fixes
+
+* hide pi split buffer from buffer list ([f1e59fa](https://github.com/garyjohnson/pi-nvim/commit/f1e59fabbf7fc37567ab3f1f168c3a5dcb28ddc5))
+
 ### [0.1.2](https://github.com/garyjohnson/pi-nvim/compare/v0.1.1...v0.1.2) (2026-04-27)
 
 ### 0.1.1 (2026-04-27)
