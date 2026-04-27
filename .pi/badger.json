@@ -25,6 +25,10 @@
       "type": "script",
       "path": "scripts/check",
       "failurePrompt": "Fix the test failures and continue working."
+    },
+    {
+      "type": "prompt",
+      "content": "Review changes made in this session. If any added behavior lacks test coverage, add test coverage (unit and e2e). If there were any critical security issues introduced to production code, address those issues."
     }
   ],
   "release": {
