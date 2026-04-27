@@ -118,6 +118,8 @@ export interface SelectionResult {
 export interface OpenFileResult {
   bufnr: number;
   name: string;
+  useSplit?: boolean;
+  showDiff?: boolean;
 }
 
 // ── Error codes ───────────────────────────────────────────────────────

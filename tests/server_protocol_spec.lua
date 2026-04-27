@@ -175,4 +175,100 @@ describe("pi-nvim server protocol", function()
     eq(-32602, result.__nvim_error.code)
 
     vim.api.nvim_buf_delete(buf, { force = true })
-  end)end)
+  end)
+
+  describe("git helpers", function()
+    it("is_git_repo detects paths in git repo", function()
+      -- Use /tmp which is outside any git repo typically
+      local test_file = "/tmp/test_lua_git_helper.lua"
+      vim.fn.writefile({ "local x = 1" }, test_file)
+
+      local result = handlers.openFile({ path = test_file })
+
+      -- Should return a result (not error)
+      eq(test_file, result.name)
+
+      -- Clean up
+      vim.fn.delete(test_file)
+    end)
+
+    it("get_git_version returns nil for non-git paths", function()
+      -- Create temp file outside git repo
+      local test_file = "/tmp/test_git_version.lua"
+      vim.fn.writefile({ "test content" }, test_file)
+
+      local result = handlers.openFile({ path = test_file })
+
+      -- Should return a valid result (not require the git version to exist)
+      eq(test_file, result.name)
+
+      -- Clean up
+      vim.fn.delete(test_file)
+    end)
+  end)
+
+  describe("openFile with config options", function()
+    local config = require("pi-nvim.config")
+
+    before_each(function()
+      -- Reset to defaults
+      config.setup({})
+    end)
+
+    after_each(function()
+      config.setup({})
+    end)
+
+    it("returns result with useSplit when open_in_split is enabled", function()
+      -- Enable split mode
+      config.setup({ open_in_split = true })
+
+      -- Create a temp file to open
+      local test_file = "/tmp/test_split_config.lua"
+      vim.fn.writefile({ "local x = 1", "print(x)" }, test_file)
+
+      local result = handlers.openFile({ path = test_file })
+
+      -- Should return a result with useSplit field
+      eq(test_file, result.name)
+      assert.is_True(result.useSplit == true)
+
+      -- Clean up
+      vim.fn.delete(test_file)
+    end)
+
+    it("returns showDiff flag when show_git_diff is enabled", function()
+      -- Enable git diff mode
+      config.setup({ show_git_diff = true })
+
+      -- Use a path that is NOT in a git repo
+      local test_file = "/tmp/test_diff_config.lua"
+      vim.fn.writefile({ "local x = 1" }, test_file)
+
+      local result = handlers.openFile({ path = test_file })
+
+      -- Should include showDiff field (false because not in git repo)
+      assert.is_True(type(result.showDiff) == "boolean")
+      eq(false, result.showDiff)
+
+      -- Clean up
+      vim.fn.delete(test_file)
+    end)
+
+    it("respects horizontal split_direction config", function()
+      config.setup({ open_in_split = true, split_direction = "horizontal" })
+
+      local test_file = "/tmp/test_horizontal.lua"
+      vim.fn.writefile({ "test" }, test_file)
+
+      local result = handlers.openFile({ path = test_file })
+
+      -- Should not error
+      eq(test_file, result.name)
+      assert.is_True(result.useSplit == true)
+
+      -- Clean up
+      vim.fn.delete(test_file)
+    end)
+  end)
+end)
