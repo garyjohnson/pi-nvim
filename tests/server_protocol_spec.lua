@@ -136,4 +136,43 @@ describe("pi-nvim server protocol", function()
     assert.is_not.Nil(result.__nvim_error)
     eq(-32602, result.__nvim_error.code)
   end)
-end)
+
+  it("openFile rejects paths with carriage return", function()
+    local result = handlers.openFile({ path = "foo.lua\rmalicious" })
+    assert.is_not.Nil(result.__nvim_error)
+    eq(-32602, result.__nvim_error.code)
+  end)
+
+  it("openFile rejects non-numeric line param", function()
+    local result = handlers.openFile({ path = "/tmp/test.lua", line = "abc" })
+    assert.is_not.Nil(result.__nvim_error)
+    eq(-32602, result.__nvim_error.code)
+  end)
+
+  it("openFile rejects non-numeric col param", function()
+    local result = handlers.openFile({ path = "/tmp/test.lua", col = "abc" })
+    assert.is_not.Nil(result.__nvim_error)
+    eq(-32602, result.__nvim_error.code)
+  end)
+
+  it("bufContent rejects non-numeric start param", function()
+    local buf = vim.api.nvim_create_buf(true, true)
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "line1", "line2", "line3" })
+
+    local result = handlers.bufContent({ bufnr = buf, start = "abc" })
+    assert.is_not.Nil(result.__nvim_error)
+    eq(-32602, result.__nvim_error.code)
+
+    vim.api.nvim_buf_delete(buf, { force = true })
+  end)
+
+  it("bufContent rejects non-numeric end param", function()
+    local buf = vim.api.nvim_create_buf(true, true)
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "line1", "line2", "line3" })
+
+    local result = handlers.bufContent({ bufnr = buf, ["end"] = "abc" })
+    assert.is_not.Nil(result.__nvim_error)
+    eq(-32602, result.__nvim_error.code)
+
+    vim.api.nvim_buf_delete(buf, { force = true })
+  end)end)

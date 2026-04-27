@@ -120,6 +120,14 @@ function M.bufContent(params)
   local start_line = params.start
   local end_line = params["end"] -- "end" is reserved in Lua
 
+  -- Validate types for optional numeric params
+  if start_line ~= nil and type(start_line) ~= "number" then
+    return server.error_result(-32602, string.format("Invalid params: start must be a number, got %s", type(start_line)))
+  end
+  if end_line ~= nil and type(end_line) ~= "number" then
+    return server.error_result(-32602, string.format("Invalid params: end must be a number, got %s", type(end_line)))
+  end
+
   local total_lines = vim.api.nvim_buf_line_count(bufnr)
 
   -- Default to full buffer
@@ -219,6 +227,14 @@ function M.openFile(params)
 
   local line = params.line
   local col = params.col
+
+  -- Validate types for optional numeric params
+  if line ~= nil and type(line) ~= "number" then
+    return server.error_result(-32602, string.format("Invalid params: line must be a number, got %s", type(line)))
+  end
+  if col ~= nil and type(col) ~= "number" then
+    return server.error_result(-32602, string.format("Invalid params: col must be a number, got %s", type(col)))
+  end
 
   -- Use vim.cmd.edit (function form) to avoid string interpolation
   -- vulnerabilities. The function form takes a plain filename, not
