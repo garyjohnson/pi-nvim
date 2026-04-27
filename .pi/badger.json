@@ -1,0 +1,34 @@
+{
+  "watchPatterns": [
+    "lua/**/*",
+    "plugin/**/*",
+    "tests/**/*",
+    "Makefile",
+    "README.md"
+  ],
+  "excludePatterns": [
+    "**/.git",
+    "**/.pi",
+    "**/.firecrawl"
+  ],
+  "notifyWithoutConfig": true,
+  "checksFast": [
+    {
+      "type": "script",
+      "path": "scripts/test_changed",
+      "fileFilter": ["tests/*_spec.lua"],
+      "failurePrompt": "Fix the test failures identified above and continue working."
+    }
+  ],
+  "checks": [
+    {
+      "type": "script",
+      "path": "scripts/check",
+      "failurePrompt": "Fix the test failures and continue working."
+    }
+  ],
+  "release": {
+    "type": "prompt",
+    "content": "Commit changes and push."
+  }
+}

@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# Badger per-file test
+# Arguments: changed test file paths (already filtered by fileFilter)
+# Exit 0 on success, non-zero on failure
+set -euo pipefail
+
+CHANGED_FILES=("$@")
+
+if [ ${#CHANGED_FILES[@]} -eq 0 ]; then
+  echo "No test files changed"
+  exit 0
+fi
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+echo "Running ${#CHANGED_FILES[@]} test file(s)..."
+
+for file in "${CHANGED_FILES[@]}"; do
+  echo "→ $file"
+  nvim --headless -u "${SCRIPT_DIR}/../tests/minimal_init.lua" -c "PlenaryBustedFile $file" -c "quit"
+done
+
+echo "All changed tests passed"

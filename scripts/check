@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Badger full check — runs the complete test suite
+# No arguments
+# Exit 0 on success, non-zero on failure
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+echo "Running full checks..."
+make -C "${SCRIPT_DIR}/.." test
+echo "All checks passed"
