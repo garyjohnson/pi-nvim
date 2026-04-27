@@ -35,7 +35,11 @@ function M.open_split()
   })
 
   -- Press Esc to exit terminal mode so you can use Ctrl-w navigation
-  vim.keymap.set('t', 'Esc', '', { buffer = pi_bufnr, silent = true })
+  vim.keymap.set('t', '<Esc>', '<C-\\><C-n>', { buffer = pi_bufnr, silent = true })
+
+  -- Ctrl-w exits terminal mode then sends the window command prefix,
+  -- so <C-w>h / <C-w>l etc. work from inside the terminal
+  vim.keymap.set('t', '<C-w>', '<C-\\><C-n><C-w>', { buffer = pi_bufnr, silent = true })
 
   -- Start insert mode immediately on first open
   vim.cmd('startinsert')
