@@ -74,21 +74,21 @@ The `main` branch is protected. **Never push directly to `main`.** Always create
 
 - `<type>`: conventional commit type (`feat`, `fix`, `refactor`, `chore`, etc.)
 - `<short-description>`: brief hyphenated description
-- `<model>`: the primary model that worked on the change (short name, e.g. `glm5`, `kimi`, `qwen`)
+- `<model>`: the primary model that worked on the change (use the full model name from session stats, e.g. `minimax`, `claude`, `gemini`)
 
 Examples:
-- `feat/status-bar-timer-glm5`
-- `fix/timer-leak-glm5`
-- `chore/release-workflow-glm5`
+- `feat/status-bar-timer-minimax`
+- `fix/timer-leak-minimax`
+- `chore/release-workflow-minimax`
 
 ### Creating a PR
 
 ```bash
 # Create a feature branch
-git checkout -b feat/status-bar-timer-glm5
+git checkout -b feat/status-bar-timer-minimax
 
 # Make commits following conventional format, then:
-git push -u origin feat/status-bar-timer-glm5
+git push -u origin feat/status-bar-timer-minimax
 
 # Include session stats in the PR body:
 ./scripts/session-stats.sh --latest
