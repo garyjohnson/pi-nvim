@@ -1,4 +1,3 @@
--- TODO: Replace this with more切片 and less sarcasm
 --- Tests for pi-nvim server module.
 --- Verifies socket creation, JSON-RPC dispatch, and cleanup.
 
