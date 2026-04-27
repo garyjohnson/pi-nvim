@@ -4,6 +4,37 @@
 local M = {}
 
 local server = require("pi-nvim.server")
+local config = require("pi-nvim.config")
+
+---------------------------------------------------------------------------
+-- Git helpers
+---------------------------------------------------------------------------
+
+--- Check if a path is inside a git repository.
+---@param path string File path to check
+---@return boolean True if path is inside a git repo
+local function is_git_repo(path)
+  local dir = vim.fn.fnamemodify(path, ":p:h")
+  while dir ~= "" and dir ~= "/" do
+    if vim.fn.isdirectory(dir .. "/.git") == 1 then
+      return true
+    end
+    dir = vim.fn.fnamemodify(dir, ":h")
+  end
+  return false
+end
+
+--- Get the git version of a file.
+---@param path string File path
+---@return string|nil content The file content at HEAD, or nil on failure
+local function get_git_version(path)
+  local cmd = string.format("git show HEAD:%s 2>/dev/null", vim.fn.shellescape(path))
+  local output = vim.fn.system(cmd)
+  if vim.v.shell_error ~= 0 then
+    return nil
+  end
+  return output
+end
 
 ---------------------------------------------------------------------------
 -- initialize
@@ -236,18 +267,85 @@ function M.openFile(params)
     return server.error_result(-32602, string.format("Invalid params: col must be a number, got %s", type(col)))
   end
 
-  -- Use vim.cmd.edit (function form) to avoid string interpolation
-  -- vulnerabilities. The function form takes a plain filename, not
-  -- an ex command, so pipe characters and other ex metacharacters
-  -- in the path cannot inject commands.
-  local ok, _ = pcall(vim.cmd.edit, path)
+  -- Get configuration options
+  local cfg = config.get()
+  local use_split = cfg.open_in_split
+  local split_dir = cfg.split_direction or "vertical"
+  local show_diff = cfg.show_git_diff
 
-  -- edit may fail for nonexistent files, but still opens a buffer.
-  -- Only true errors (permission, etc.) propagate. pcall catches them.
+  -- Handle split and diff mode
+  local working_bufnr = nil
+  local git_bufnr = nil
 
-  if line then
-    local target_col = col or 1
-    pcall(vim.api.nvim_win_set_cursor, 0, { line, target_col - 1 })
+  if use_split or show_diff then
+    -- Check if we can show git diff
+    local can_show_diff = show_diff and is_git_repo(path)
+    local git_content = nil
+
+
+    if can_show_diff then
+      git_content = get_git_version(path)
+      can_show_diff = git_content ~= nil
+    end
+
+    -- Create the split(s)
+    if can_show_diff then
+      -- Two splits: one for working copy, one for git version
+      if split_dir == "horizontal" then
+        vim.cmd("split")
+        vim.cmd("split")
+      else
+        vim.cmd("vsplit")
+        vim.cmd("vsplit")
+      end
+
+      -- In the first split, load the working copy (will be on the right/bottom)
+      pcall(vim.cmd.edit, path)
+      working_bufnr = vim.api.nvim_get_current_buf()
+      vim.opt_local.diff = true
+
+      -- Move to the other split and load git version
+      vim.cmd("wincmd w")
+      vim.api.nvim_buf_set_lines(0, 0, -1, false, vim.fn.split(git_content, '\n'))
+      vim.bo[0].filetype = vim.bo[working_bufnr].filetype
+      vim.opt_local.diff = true
+      git_bufnr = vim.api.nvim_get_current_buf()
+
+      -- Position cursor at the correct line in the working copy
+      if line then
+        pcall(vim.api.nvim_win_set_cursor, 0, { line, (col or 1) - 1 })
+      end
+    else
+      -- Just open in a split (no git diff or no git version available)
+      if use_split then
+        if split_dir == "horizontal" then
+          vim.cmd("split")
+        else
+          vim.cmd("vsplit")
+        end
+        pcall(vim.cmd.edit, path)
+
+        if line then
+          local target_col = col or 1
+          pcall(vim.api.nvim_win_set_cursor, 0, { line, target_col - 1 })
+        end
+      else
+        -- Fallback to regular edit if no split needed
+        pcall(vim.cmd.edit, path)
+        if line then
+          local target_col = col or 1
+          pcall(vim.api.nvim_win_set_cursor, 0, { line, target_col - 1 })
+        end
+      end
+    end
+  else
+    -- Original behavior: edit in current window
+    pcall(vim.cmd.edit, path)
+
+    if line then
+      local target_col = col or 1
+      pcall(vim.api.nvim_win_set_cursor, 0, { line, target_col - 1 })
+    end
   end
 
   -- Find the buffer by name
@@ -259,6 +357,8 @@ function M.openFile(params)
   return {
     bufnr = bufnr,
     name = path,
+    useSplit = use_split,
+    showDiff = show_diff and is_git_repo(path),
   }
 end
 

@@ -30,6 +30,44 @@ Using a plugin manager like [lazy.nvim](https://github.com/folke/lazy.nvim):
 :PiSplit
 ```
 
+## Configuration
+
+The plugin is configured in your Neovim `init.lua`:
+
+```lua
+require("pi-nvim").setup({
+  -- Log level: vim.log.levels.TRACE, DEBUG, INFO, WARN, ERROR
+  log_level = vim.log.levels.INFO,
+
+  -- Socket path template. {pid} is replaced with neovim's PID.
+  sock_path_template = "/tmp/pi-nvim-{pid}.sock",
+
+  -- Whether to automatically start the server on plugin load
+  auto_start = false,
+
+  -- Whether to automatically start the server when opening a pi split
+  start_on_split = true,
+
+  -- Whether to open files in a split window instead of the current window.
+  -- When pi edits/writes a file, it will open in a split (like vsplit).
+  open_in_split = false,
+
+  -- Split direction: "vertical" or "horizontal" (default: "vertical")
+  split_direction = "vertical",
+
+  -- Whether to show an inline git diff when opening a file tracked by git.
+  -- When enabled along with open_in_split, shows diff between working copy
+  -- and HEAD version in adjacent splits.
+  show_git_diff = false,
+})
+```
+
+### How it works
+
+When `open_in_split = true`, file edits from pi open in a new split window instead of replacing the current buffer.
+
+When `show_git_diff = true` and the file is tracked by git, pi opens two splits side-by-side: one with the working copy and one with the HEAD version, with diff highlighting enabled.
+
 ## Development
 
 This project uses [Conventional Commits](https://www.conventionalcommits.org/) and [standard-version](https://github.com/conventional-changelog/standard-version) for versioning.

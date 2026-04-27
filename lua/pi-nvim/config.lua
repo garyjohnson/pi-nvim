@@ -13,6 +13,15 @@ M.defaults = {
 
   -- Whether to automatically start the server when opening a pi split
   start_on_split = true,
+
+  -- Whether to open files in a split window instead of the current window
+  open_in_split = false,
+
+  -- Split direction: "vertical" or "horizontal"
+  split_direction = "vertical",
+
+  -- Whether to show a git diff when opening a file that is tracked by git
+  show_git_diff = false,
 }
 
 M.options = {}
