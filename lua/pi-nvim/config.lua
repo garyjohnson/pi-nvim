@@ -13,6 +13,15 @@ M.defaults = {
 
   -- Whether to automatically start the server when opening a pi split
   start_on_split = true,
+
+  -- Auto-open files in nvim when pi uses the edit or write tools
+  auto_open = true,
+
+  -- Show a git diff in diffthis mode when auto_open is triggered
+  show_diff = true,
+
+  -- Direction for the diff split: "vertical" or "horizontal"
+  diff_split = "vertical",
 }
 
 M.options = {}

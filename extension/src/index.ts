@@ -53,6 +53,23 @@ export default function (pi: ExtensionAPI) {
     }
   });
 
+  pi.on("tool_result", async (event, _ctx) => {
+    const c = client;
+    if (!c || !c.connected) return;
+
+    if (event.toolName === "edit" || event.toolName === "write") {
+      const path = (event.input as { path?: string }).path;
+      if (!path) return;
+
+      try {
+        await c.request(Methods.FILE_CHANGED, { path });
+      } catch (err) {
+        // Best-effort: silently ignore nvim communication errors
+        console.error("[pi-nvim] Failed to notify nvim of file change:", err);
+      }
+    }
+  });
+
   pi.on("session_shutdown", async (_event, _ctx) => {
     if (client) {
       console.log("[pi-nvim] Disconnecting from neovim");

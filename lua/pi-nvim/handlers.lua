@@ -4,6 +4,7 @@
 local M = {}
 
 local server = require("pi-nvim.server")
+local config = require("pi-nvim.config")
 
 ---------------------------------------------------------------------------
 -- initialize
@@ -263,6 +264,103 @@ function M.openFile(params)
 end
 
 ---------------------------------------------------------------------------
+-- fileChanged
+---------------------------------------------------------------------------
+
+function M.fileChanged(params)
+  local path = params.path
+  if not path or path == "" then
+    return server.error_result(-32602, "Missing required param: path")
+  end
+
+  -- Same sanitization as openFile
+  if path:find('|') or path:find('\n') or path:find('\r') then
+    return server.error_result(-32602, "Invalid path: contains disallowed characters")
+  end
+
+  local opts = config.get()
+
+  -- Auto-open disabled: nothing to do
+  if not opts.auto_open then
+    return { ok = true }
+  end
+
+  -- Open the file (relative to nvim's cwd, same as openFile)
+  pcall(vim.cmd.edit, path)
+
+  if not opts.show_diff then
+    return { ok = true, opened = true }
+  end
+
+  local file_bufnr = vim.api.nvim_get_current_buf()
+
+  -- Check if the file is in a git repo
+  local git_root = vim.fn.system("git rev-parse --show-toplevel 2>/dev/null")
+  if vim.v.shell_error ~= 0 or git_root == "" then
+    return { ok = true, opened = true, git = false }
+  end
+
+  git_root = git_root:gsub("\n$", "")
+
+  -- Check if file is tracked by git
+  local tracked = vim.fn.system("git ls-files --error-unmatch " .. vim.fn.shellescape(path) .. " 2>/dev/null")
+  if vim.v.shell_error ~= 0 then
+    return { ok = true, opened = true, git = true, tracked = false }
+  end
+
+  -- Get repo-relative path for git show
+  local relpath = vim.fn.system("git ls-files --full-name " .. vim.fn.shellescape(path) .. " 2>/dev/null")
+  relpath = relpath:gsub("\n$", "")
+
+  -- Get HEAD version of the file
+  local head_content = vim.fn.system(
+    "git -C " .. vim.fn.shellescape(git_root) .. " show HEAD:" .. vim.fn.shellescape(relpath) .. " 2>/dev/null"
+  )
+
+  if vim.v.shell_error ~= 0 then
+    return { ok = true, opened = true, git = true, tracked = true, head = false }
+  end
+
+  -- Create scratch buffer with HEAD content
+  local scratch_buf = vim.api.nvim_create_buf(false, true)
+  local lines = vim.split(head_content, "\n", { plain = true })
+
+  -- Remove trailing empty line (files end with newline)
+  if #lines > 0 and lines[#lines] == "" then
+    table.remove(lines)
+  end
+
+  vim.api.nvim_buf_set_lines(scratch_buf, 0, -1, false, lines)
+
+  -- Buffer options
+  vim.bo[scratch_buf].buftype = "nofile"
+  vim.bo[scratch_buf].modifiable = false
+  vim.bo[scratch_buf].buflisted = false
+  vim.bo[scratch_buf].filetype = vim.bo[file_bufnr].filetype
+
+  -- Label the scratch buffer
+  vim.api.nvim_buf_set_name(scratch_buf, "[git:HEAD] " .. path)
+
+  -- Open scratch in split
+  if opts.diff_split == "vertical" then
+    vim.cmd("rightbelow vsplit")
+  else
+    vim.cmd("rightbelow split")
+  end
+
+  local scratch_win = vim.api.nvim_get_current_win()
+  vim.api.nvim_win_set_buf(scratch_win, scratch_buf)
+
+  -- Enable diff mode on both windows
+  vim.cmd("diffthis")
+  vim.cmd("wincmd p")
+  vim.cmd("diffthis")
+  vim.cmd("diffupdate")
+
+  return { ok = true, opened = true, diff = true }
+end
+
+---------------------------------------------------------------------------
 -- Register all handlers with the server
 ---------------------------------------------------------------------------
 
@@ -272,6 +370,7 @@ function M.register_all()
   server.register_method("bufContent", M.bufContent)
   server.register_method("selection", M.selection)
   server.register_method("openFile", M.openFile)
+  server.register_method("fileChanged", M.fileChanged)
 end
 
 return M
