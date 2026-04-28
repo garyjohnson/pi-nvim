@@ -11,6 +11,15 @@ local handlers = require("pi-nvim.handlers")
 -- Track the buffer number of the pi terminal we launched
 local pi_bufnr = nil
 
+--- Get the buffer number of the pi terminal, or nil if not running.
+--- Used by handlers to avoid displacing the pi window.
+function M.get_pi_bufnr()
+  if pi_bufnr and vim.api.nvim_buf_is_valid(pi_bufnr) and vim.bo[pi_bufnr].buftype == "terminal" then
+    return pi_bufnr
+  end
+  return nil
+end
+
 --- Start the unix socket server and register JSON-RPC handlers.
 ---@return string|nil sock_path The socket path, or nil on failure
 function M.start_server()

@@ -30,6 +30,10 @@ Using a plugin manager like [lazy.nvim](https://github.com/folke/lazy.nvim):
 :PiSplit
 ```
 
+## Auto Diff
+
+When a file is edited by the agent, pi-nvim can automatically open a split showing the git diff against `HEAD`. Both panes enter Vim's diff mode so you can see exactly what changed at a glance. This is enabled by default via the `show_diff` option and only activates for files tracked in a git repository.
+
 ## Development
 
 This project uses [Conventional Commits](https://www.conventionalcommits.org/) and [standard-version](https://github.com/conventional-changelog/standard-version) for versioning.

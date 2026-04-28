@@ -267,6 +267,21 @@ end
 -- fileChanged
 ---------------------------------------------------------------------------
 
+--- Check if a window is suitable for placing a file or diff buffer.
+--- Skips terminal buffers, nofile/scratch buffers, quickfix, and prompts.
+local function is_edit_window(winid)
+  local bufnr = vim.api.nvim_win_get_buf(winid)
+  local bt = vim.bo[bufnr].buftype
+  if bt == "terminal" then return false end
+  if bt == "nofile" or bt == "quickfix" or bt == "prompt" then return false end
+  return true
+end
+
+--- Resolve a path to its absolute form for reliable comparisons.
+local function resolve_path(path)
+  return vim.fn.fnamemodify(path, ":p")
+end
+
 function M.fileChanged(params)
   local path = params.path
   if not path or path == "" then
@@ -285,8 +300,116 @@ function M.fileChanged(params)
     return { ok = true }
   end
 
-  -- Open the file (relative to nvim's cwd, same as openFile)
-  pcall(vim.cmd.edit, path)
+  local pi = require("pi-nvim")
+  local pi_bufnr = pi.get_pi_bufnr()
+  local abs_path = resolve_path(path)
+  local tabpage = vim.api.nvim_get_current_tabpage()
+  local wins = vim.api.nvim_tabpage_list_wins(tabpage)
+
+  ------------------------------------------------------------------------
+  -- Try to find an existing diff scratch buffer for this file in the
+  -- current tabpage.  If one exists, just reload the file buffer —
+  -- the diff will update automatically.
+  ------------------------------------------------------------------------
+  -- nvim_buf_set_name resolves relative paths, so we always label
+  -- scratch buffers with the absolute path.  Use suffix matching to
+  -- find them regardless of how the name was stored.
+  local scratch_suffix = "[git:HEAD] " .. abs_path
+  local function is_scratch_buf(bufnr)
+    local name = vim.api.nvim_buf_get_name(bufnr)
+    return name:sub(-#scratch_suffix) == scratch_suffix
+  end
+
+  for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
+    if is_scratch_buf(bufnr) then
+      local file_win, scratch_win
+      for _, winid in ipairs(wins) do
+        local wbuf = vim.api.nvim_win_get_buf(winid)
+        if wbuf == bufnr then scratch_win = winid end
+        if resolve_path(vim.api.nvim_buf_get_name(wbuf)) == abs_path then
+          file_win = winid
+        end
+      end
+      if file_win and scratch_win then
+        -- Both windows exist — reload the file buffer and refresh diff
+        vim.api.nvim_set_current_win(file_win)
+        vim.cmd("checktime")
+        vim.cmd("diffupdate")
+        return { ok = true, opened = true, diff = true }
+      end
+      -- Scratch buffer exists but not visible in this tab — fall through
+      -- to create a fresh diff setup below.
+      break
+    end
+  end
+
+  ------------------------------------------------------------------------
+  -- Find or create a window for the file, without displacing the pi
+  -- terminal.
+  --
+  -- Algorithm:
+  --   1. Look for an edit-class window already showing the file.
+  --   2. Look for any other edit-class window to open the file in.
+  --   3. If only terminal windows exist, split off the pi window.
+  ------------------------------------------------------------------------
+
+  --- Find a window in the current tabpage showing the file, skipping
+  --- terminal and scratch windows.
+  local function find_file_window()
+    for _, winid in ipairs(wins) do
+      if is_edit_window(winid) then
+        local bufnr = vim.api.nvim_win_get_buf(winid)
+        if resolve_path(vim.api.nvim_buf_get_name(bufnr)) == abs_path then
+          return winid
+        end
+      end
+    end
+    return nil
+  end
+
+  --- Find any edit-class window in the current tabpage (not showing the
+  --- file, preferring the current window).
+  local function find_available_window()
+    -- Prefer the current window if it's suitable
+    local cur = vim.api.nvim_get_current_win()
+    if is_edit_window(cur) then return cur end
+    -- Fall back to any edit-class window
+    for _, winid in ipairs(wins) do
+      if is_edit_window(winid) then return winid end
+    end
+    return nil
+  end
+
+  local file_win = find_file_window()
+
+  if file_win then
+    -- Scenario C: file already open — reload it from disk
+    vim.api.nvim_set_current_win(file_win)
+    vim.cmd("checktime")
+  else
+    local avail_win = find_available_window()
+    if avail_win then
+      -- Scenario A: reuse an available edit window
+      vim.api.nvim_set_current_win(avail_win)
+      pcall(vim.cmd.edit, path)
+    else
+      -- Scenario B: only terminal windows — split off pi
+      local pi_win
+      if pi_bufnr then
+        for _, winid in ipairs(wins) do
+          if vim.api.nvim_win_get_buf(winid) == pi_bufnr then
+            pi_win = winid
+            break
+          end
+        end
+      end
+      if pi_win then
+        vim.api.nvim_set_current_win(pi_win)
+      end
+      vim.cmd("rightbelow vsplit")
+      pcall(vim.cmd.edit, path)
+    end
+  end
 
   if not opts.show_diff then
     return { ok = true, opened = true }
@@ -321,6 +444,16 @@ function M.fileChanged(params)
     return { ok = true, opened = true, git = true, tracked = true, head = false }
   end
 
+  -- Check for an existing scratch buffer with this name (e.g. from a
+  -- prior fileChanged call).  If one exists, delete it so we can create a
+  -- fresh one — the content may have changed.
+  for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
+    if is_scratch_buf(bufnr) then
+      pcall(vim.api.nvim_buf_delete, bufnr, { force = true })
+      break
+    end
+  end
+
   -- Create scratch buffer with HEAD content
   local scratch_buf = vim.api.nvim_create_buf(false, true)
   local lines = vim.split(head_content, "\n", { plain = true })
@@ -338,10 +471,12 @@ function M.fileChanged(params)
   vim.bo[scratch_buf].buflisted = false
   vim.bo[scratch_buf].filetype = vim.bo[file_bufnr].filetype
 
-  -- Label the scratch buffer
-  vim.api.nvim_buf_set_name(scratch_buf, "[git:HEAD] " .. path)
+  -- Label the scratch buffer (nvim_buf_set_name may resolve relative
+  -- paths to absolute, so use the absolute form for consistency.)
+  local scratch_name = "[git:HEAD] " .. abs_path
+  vim.api.nvim_buf_set_name(scratch_buf, scratch_name)
 
-  -- Open scratch in split
+  -- Open scratch in split relative to the file window (which is now current)
   if opts.diff_split == "vertical" then
     vim.cmd("rightbelow vsplit")
   else
