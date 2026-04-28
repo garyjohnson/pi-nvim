@@ -258,6 +258,40 @@ describe("is_edit_window", function()
     -- is nofile and was skipped
     assert.is.True(win_count() > orig_win_count)
   end)
+
+  it("skips quickfix buffers when finding a window", function()
+    -- Set current buffer to quickfix
+    local qf = vim.api.nvim_create_buf(true, true)
+    vim.bo[qf].buftype = "quickfix"
+    vim.api.nvim_win_set_buf(0, qf)
+
+    local tracked_path = "lua/pi-nvim/config.lua"
+    local orig_win_count = win_count()
+
+    local result = handlers.fileChanged({ path = tracked_path })
+    eq(true, result.ok)
+    eq(true, result.opened)
+
+    -- A new window should have been created because quickfix is not an edit window
+    assert.is.True(win_count() > orig_win_count)
+  end)
+
+  it("skips prompt buffers when finding a window", function()
+    -- Set current buffer to prompt
+    local prompt = vim.api.nvim_create_buf(true, true)
+    vim.bo[prompt].buftype = "prompt"
+    vim.api.nvim_win_set_buf(0, prompt)
+
+    local tracked_path = "lua/pi-nvim/config.lua"
+    local orig_win_count = win_count()
+
+    local result = handlers.fileChanged({ path = tracked_path })
+    eq(true, result.ok)
+    eq(true, result.opened)
+
+    -- A new window should have been created because prompt is not an edit window
+    assert.is.True(win_count() > orig_win_count)
+  end)
 end)
 
 describe("get_pi_bufnr", function()
