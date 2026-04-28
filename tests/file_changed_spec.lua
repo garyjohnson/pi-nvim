@@ -20,6 +20,18 @@ local function find_win_by_bufname(suffix)
   return nil
 end
 
+-- Helper: find a window showing a buffer whose name contains a substring
+-- (useful for scratch buffers whose name starts with "[git:HEAD]")
+local function find_win_by_bufname_containing(substr)
+  for _, winid in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+    local name = vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(winid))
+    if name:find(substr, 1, true) then
+      return winid
+    end
+  end
+  return nil
+end
+
 -- Helper: check if a buffer with a given name suffix exists (even if hidden)
 local function buf_exists_with_name(suffix)
   for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
@@ -169,27 +181,61 @@ describe("fileChanged window placement", function()
   end)
 
   -----------------------------------------------------------------------
-  -- Horizontal diff split
+  -- Horizontal diff split: verify the scratch buffer is below the file
+  -- (i.e. same width, different height — not a vertical split).
   -----------------------------------------------------------------------
   it("uses horizontal split when diff_split is horizontal", function()
     config.setup({ auto_open = true, show_diff = true, diff_split = "horizontal" })
     local tracked_path = "lua/pi-nvim/config.lua"
-    local orig_win_count = win_count()
 
     local result = handlers.fileChanged({ path = tracked_path })
     eq(true, result.ok)
     eq(true, result.opened)
     eq(true, result.diff)
 
-    -- Should have 2 windows (original + horizontal split)
-    eq(orig_win_count + 1, win_count())
+    -- Should have 2 windows: file + horizontal split scratch
+    eq(2, win_count())
 
-    -- The new window should be a horizontal split (width same as original)
-    -- In horizontal split, the new window has the same width as the parent
     local wins = vim.api.nvim_tabpage_list_wins(0)
-    assert.is.True(#wins >= 2)
+    local file_win = find_win_by_bufname("config.lua")
+    local scratch_win = find_win_by_bufname_containing("[git:HEAD]")
+    assert.is_not.Nil(file_win)
+    assert.is_not.Nil(scratch_win)
+
+    -- In a horizontal split, both windows have the same width (full columns)
+    local file_width = vim.api.nvim_win_get_width(file_win)
+    local scratch_width = vim.api.nvim_win_get_width(scratch_win)
+    eq(file_width, scratch_width)
 
     config.setup({}) -- restore defaults
+  end)
+
+  -----------------------------------------------------------------------
+  -- Vertical diff split (default): verify the scratch buffer is to the
+  -- right of the file (i.e. different width — not a horizontal split).
+  -----------------------------------------------------------------------
+  it("uses vertical split when diff_split is vertical (default)", function()
+    -- default diff_split is "vertical"
+    local tracked_path = "lua/pi-nvim/config.lua"
+
+    local result = handlers.fileChanged({ path = tracked_path })
+    eq(true, result.ok)
+    eq(true, result.opened)
+    eq(true, result.diff)
+
+    -- Should have 2 windows: file + vertical split scratch
+    eq(2, win_count())
+
+    local file_win = find_win_by_bufname("config.lua")
+    local scratch_win = find_win_by_bufname_containing("[git:HEAD]")
+    assert.is_not.Nil(file_win)
+    assert.is_not.Nil(scratch_win)
+
+    -- In a vertical split, widths differ (scratch is narrower, right side)
+    -- and heights are the same
+    local file_height = vim.api.nvim_win_get_height(file_win)
+    local scratch_height = vim.api.nvim_win_get_height(scratch_win)
+    eq(file_height, scratch_height)
   end)
 
   -----------------------------------------------------------------------
