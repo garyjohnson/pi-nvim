@@ -329,6 +329,69 @@ describe("fileChanged window placement", function()
 
 end)
 
+describe("scratch buffer properties", function()
+  local handlers = require("pi-nvim.handlers")
+  local config = require("pi-nvim.config")
+
+  before_each(function()
+    config.setup({ auto_open = true, show_diff = true })
+    cleanup()
+  end)
+
+  after_each(function()
+    cleanup()
+    config.setup({}) -- restore defaults
+  end)
+
+  it("sets buftype=nofile on scratch buffer", function()
+    local tracked_path = "lua/pi-nvim/config.lua"
+
+    handlers.fileChanged({ path = tracked_path })
+
+    local scratch_win = find_win_by_bufname_containing("[git:HEAD]")
+    assert.is_not.Nil(scratch_win)
+    local scratch_buf = vim.api.nvim_win_get_buf(scratch_win)
+    eq("nofile", vim.bo[scratch_buf].buftype)
+  end)
+
+  it("sets modifiable=false on scratch buffer", function()
+    local tracked_path = "lua/pi-nvim/config.lua"
+
+    handlers.fileChanged({ path = tracked_path })
+
+    local scratch_win = find_win_by_bufname_containing("[git:HEAD]")
+    assert.is_not.Nil(scratch_win)
+    local scratch_buf = vim.api.nvim_win_get_buf(scratch_win)
+    eq(false, vim.bo[scratch_buf].modifiable)
+  end)
+
+  it("sets buflisted=false on scratch buffer", function()
+    local tracked_path = "lua/pi-nvim/config.lua"
+
+    handlers.fileChanged({ path = tracked_path })
+
+    local scratch_win = find_win_by_bufname_containing("[git:HEAD]")
+    assert.is_not.Nil(scratch_win)
+    local scratch_buf = vim.api.nvim_win_get_buf(scratch_win)
+    eq(false, vim.bo[scratch_buf].buflisted)
+  end)
+
+  it("matches filetype of the source file on scratch buffer", function()
+    local tracked_path = "lua/pi-nvim/config.lua"
+
+    handlers.fileChanged({ path = tracked_path })
+
+    local file_win = find_win_by_bufname("config.lua")
+    local scratch_win = find_win_by_bufname_containing("[git:HEAD]")
+    assert.is_not.Nil(file_win)
+    assert.is_not.Nil(scratch_win)
+
+    local file_buf = vim.api.nvim_win_get_buf(file_win)
+    local scratch_buf = vim.api.nvim_win_get_buf(scratch_win)
+    eq(vim.bo[file_buf].filetype, vim.bo[scratch_buf].filetype)
+  end)
+end)
+
 describe("is_edit_window", function()
   -- is_edit_window is a local function, so we test it indirectly through
   -- fileChanged behavior. When the current window is a non-edit-class
