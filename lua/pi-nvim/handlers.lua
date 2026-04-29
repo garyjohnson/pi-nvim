@@ -213,6 +213,52 @@ end
 -- openFile
 ---------------------------------------------------------------------------
 
+--- Resolve a path to its absolute form for reliable comparisons.
+local function resolve_path(path)
+  return vim.fn.fnamemodify(path, ":p")
+end
+
+--- Close any diff scratch windows/buffers in the current tabpage that
+--- don't belong to the given file.  If keep_for_path is nil, close all
+--- scratch windows.  Also clears diff mode on paired file windows.
+local function cleanup_diffs(keep_for_path)
+  local keep_abs = keep_for_path and resolve_path(keep_for_path) or nil
+  local keep_suffix = keep_abs and ("[git:HEAD] " .. keep_abs) or nil
+  local closed_any = false
+
+  for _, winid in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+    local bufnr = vim.api.nvim_win_get_buf(winid)
+    local name = vim.api.nvim_buf_get_name(bufnr)
+    if name:find("[git:HEAD]", 1, true) then
+      local should_close = not keep_suffix or name:sub(-#keep_suffix) ~= keep_suffix
+      if should_close then
+        pcall(vim.api.nvim_win_close, winid, true)
+        pcall(vim.api.nvim_buf_delete, bufnr, { force = true })
+        closed_any = true
+      end
+    end
+  end
+
+  -- Also delete hidden scratch buffers (not in any window).
+  for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
+    local name = vim.api.nvim_buf_get_name(bufnr)
+    if name:find("[git:HEAD]", 1, true) then
+      local should_delete = not keep_suffix or name:sub(-#keep_suffix) ~= keep_suffix
+      if should_delete then
+        pcall(vim.api.nvim_buf_delete, bufnr, { force = true })
+        closed_any = true
+      end
+    end
+  end
+
+  if closed_any then
+    -- Turn off diff mode in all windows that lost their scratch pair.
+    -- We use :diffoff! because :diffoff only works in the current window
+    -- and the current window may just have been closed.
+    pcall(vim.cmd, "diffoff!")
+  end
+end
+
 function M.openFile(params)
   local path = params.path
   if not path or path == "" then
@@ -236,6 +282,10 @@ function M.openFile(params)
   if col ~= nil and type(col) ~= "number" then
     return server.error_result(-32602, string.format("Invalid params: col must be a number, got %s", type(col)))
   end
+
+  -- Clean up any stale diff scratch windows for other files before
+  -- opening, so we don't end up with mismatched diffs.
+  cleanup_diffs(path)
 
   -- Use vim.cmd.edit (function form) to avoid string interpolation
   -- vulnerabilities. The function form takes a plain filename, not
@@ -277,11 +327,6 @@ local function is_edit_window(winid)
   return true
 end
 
---- Resolve a path to its absolute form for reliable comparisons.
-local function resolve_path(path)
-  return vim.fn.fnamemodify(path, ":p")
-end
-
 function M.fileChanged(params)
   local path = params.path
   if not path or path == "" then
@@ -303,6 +348,11 @@ function M.fileChanged(params)
   local pi = require("pi-nvim")
   local pi_bufnr = pi.get_pi_bufnr()
   local abs_path = resolve_path(path)
+
+  -- Clean up any stale diff scratch windows for other files so we
+  -- don't end up with mismatched diffs in this tabpage.
+  cleanup_diffs(path)
+
   local tabpage = vim.api.nvim_get_current_tabpage()
   local wins = vim.api.nvim_tabpage_list_wins(tabpage)
 

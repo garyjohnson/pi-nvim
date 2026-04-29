@@ -488,3 +488,167 @@ describe("resolve_path", function()
     assert.is.True(result:sub(1, 1) == "/")
   end)
 end)
+
+describe("cleanup_diffs", function()
+  local handlers = require("pi-nvim.handlers")
+  local config = require("pi-nvim.config")
+
+  before_each(function()
+    config.setup({ auto_open = true, show_diff = true })
+    cleanup()
+  end)
+
+  after_each(function()
+    cleanup()
+    config.setup({})
+  end)
+
+  it("closes old diff scratch when fileChanged opens a different file", function()
+    local tracked_path_a = "lua/pi-nvim/config.lua"
+    local tracked_path_b = "lua/pi-nvim/server.lua"
+
+    -- First call: open file A with diff
+    local result1 = handlers.fileChanged({ path = tracked_path_a })
+    eq(true, result1.ok)
+    eq(true, result1.diff)
+
+    local abs_a = vim.fn.fnamemodify(tracked_path_a, ":p")
+    local abs_b = vim.fn.fnamemodify(tracked_path_b, ":p")
+
+    -- Verify scratch for A exists
+    assert.is_not.Nil(find_win_by_bufname_containing("[git:HEAD] " .. abs_a))
+
+    -- Second call: open file B with diff
+    local result2 = handlers.fileChanged({ path = tracked_path_b })
+    eq(true, result2.ok)
+    eq(true, result2.diff)
+
+    -- Scratch for A should be gone
+    assert.is.Nil(find_win_by_bufname_containing("[git:HEAD] " .. abs_a))
+
+    -- Scratch for B should exist
+    assert.is_not.Nil(find_win_by_bufname_containing("[git:HEAD] " .. abs_b))
+
+    -- Should still be 2 windows (file B + scratch B)
+    eq(2, win_count())
+  end)
+
+  it("keeps existing diff when fileChanged is called for the same file", function()
+    local tracked_path = "lua/pi-nvim/config.lua"
+
+    -- First call: open file with diff
+    local result1 = handlers.fileChanged({ path = tracked_path })
+    eq(true, result1.ok)
+    eq(true, result1.diff)
+    local win_count_after_first = win_count()
+
+    -- Second call: should reuse existing diff
+    local result2 = handlers.fileChanged({ path = tracked_path })
+    eq(true, result2.ok)
+    eq(true, result2.diff)
+
+    -- Window count should not increase
+    eq(win_count_after_first, win_count())
+  end)
+
+  it("clears diff when openFile is used", function()
+    local tracked_path = "lua/pi-nvim/config.lua"
+    local other_path = "lua/pi-nvim/server.lua"
+
+    -- Set up a diff first
+    local result = handlers.fileChanged({ path = tracked_path })
+    eq(true, result.diff)
+
+    local abs_tracked = vim.fn.fnamemodify(tracked_path, ":p")
+    assert.is_not.Nil(find_win_by_bufname_containing("[git:HEAD] " .. abs_tracked))
+
+    -- Now open a different file via openFile
+    local result_open = handlers.openFile({ path = other_path })
+    assert.is_not.equal(vim.json.null, result_open.bufnr)
+
+    -- Old diff scratch should be gone
+    assert.is.Nil(find_win_by_bufname_containing("[git:HEAD] " .. abs_tracked))
+
+    -- Should be back to 1 window
+    eq(1, win_count())
+  end)
+
+  it("removes diff mode from paired file window after cleanup", function()
+    local tracked_path = "lua/pi-nvim/config.lua"
+    local other_path = "lua/pi-nvim/server.lua"
+
+    -- Set up a diff for file A
+    handlers.fileChanged({ path = tracked_path })
+    local file_win = find_win_by_bufname("config.lua")
+    assert.is_not.Nil(file_win)
+    assert.is.True(vim.wo[file_win].diff)
+
+    -- Open a different file via openFile
+    handlers.openFile({ path = other_path })
+
+    -- The old file window should no longer be in diff mode
+    assert.is.False(vim.wo[file_win].diff)
+  end)
+
+  it("removes hidden scratch buffers during cleanup", function()
+    local tracked_path = "lua/pi-nvim/config.lua"
+    local other_path = "lua/pi-nvim/server.lua"
+
+    -- Set up a diff for file A
+    handlers.fileChanged({ path = tracked_path })
+    local abs_a = vim.fn.fnamemodify(tracked_path, ":p")
+
+    -- Hide the file window (scratch is still visible)
+    vim.cmd("wincmd h")
+    vim.cmd("hide")
+
+    -- Verify scratch buffer still exists (in the remaining window)
+    local scratch_win = find_win_by_bufname_containing("[git:HEAD] " .. abs_a)
+    assert.is_not.Nil(scratch_win)
+
+    -- Now open a different file via openFile
+    handlers.openFile({ path = other_path })
+
+    -- Even hidden scratch should be gone
+    assert.is.Nil(find_win_by_bufname_containing("[git:HEAD] " .. abs_a))
+
+    -- No [git:HEAD] buffers should exist anywhere
+    for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
+      local name = vim.api.nvim_buf_get_name(bufnr)
+      assert.is.Nil(name:find("[git:HEAD]", 1, true))
+    end
+  end)
+
+  it("does not touch non-scratch buffers during cleanup", function()
+    local tracked_path = "lua/pi-nvim/config.lua"
+    local other_path = "lua/pi-nvim/server.lua"
+
+    -- Open two real files (no diff)
+    config.setup({ auto_open = false, show_diff = false })
+    vim.cmd("edit " .. tracked_path)
+    vim.cmd("vsplit " .. other_path)
+    local orig_bufs = #vim.api.nvim_list_bufs()
+
+    -- Call cleanup indirectly via fileChanged on auto_open=false which
+    -- returns early but first triggers cleanup_diffs internally.
+    -- Actually fileChanged returns before cleanup with auto_open=false.
+    -- So test cleanup via openFile instead.
+    config.setup({ auto_open = true, show_diff = true })
+    local prev_bufs = #vim.api.nvim_list_bufs()
+
+    -- Set up a diff, then open another file
+    handlers.fileChanged({ path = tracked_path })
+    handlers.openFile({ path = other_path })
+
+    -- Non-scratch buffers should remain (tracked_path and other_path)
+    local found_tracked = false
+    local found_other = false
+    for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
+      local name = vim.api.nvim_buf_get_name(bufnr)
+      if name:find("config.lua") then found_tracked = true end
+      if name:find("server.lua") then found_other = true end
+    end
+    assert.is.True(found_tracked)
+    assert.is.True(found_other)
+  end)
+end)
