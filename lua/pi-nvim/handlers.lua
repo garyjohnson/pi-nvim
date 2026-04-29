@@ -489,8 +489,20 @@ function M.fileChanged(params)
   -- Enable diff mode on both windows
   vim.cmd("diffthis")
   vim.cmd("wincmd p")
+  local file_win = vim.api.nvim_get_current_win()
   vim.cmd("diffthis")
   vim.cmd("diffupdate")
+
+  -- Align winbars: if the file window has a winbar set (e.g. by
+  -- barbecue/navic), give the scratch window a matching winbar so
+  -- the two diff halves don't become vertically misaligned.
+  local file_winbar = vim.wo[file_win].winbar
+  if file_winbar and file_winbar ~= "" then
+    -- Use a label with the filename to provide context.
+    -- Escape any % in the path (winbar uses statusline syntax).
+    local label = " [git:HEAD] " .. vim.fn.fnamemodify(abs_path, ":t")
+    vim.wo[scratch_win].winbar = label:gsub("%%", "%%%%")
+  end
 
   return { ok = true, opened = true, diff = true }
 end

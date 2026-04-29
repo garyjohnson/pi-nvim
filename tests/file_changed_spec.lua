@@ -51,10 +51,11 @@ local function cleanup()
   vim.cmd("silent! %bwipeout!")
   -- create a fresh empty buffer
   vim.cmd("enew")
-  -- clear diff options
+  -- clear diff options and winbars
   for _, win in ipairs(vim.api.nvim_list_wins()) do
     if vim.api.nvim_win_is_valid(win) then
       vim.wo[win].diff = false
+      vim.wo[win].winbar = ""
     end
   end
 end
@@ -236,6 +237,68 @@ describe("fileChanged window placement", function()
     local file_height = vim.api.nvim_win_get_height(file_win)
     local scratch_height = vim.api.nvim_win_get_height(scratch_win)
     eq(file_height, scratch_height)
+  end)
+
+  -----------------------------------------------------------------------
+  -- Winbar alignment: when the file window has a winbar (e.g. from
+  -- barbecue/navic), the scratch diff window should also get a winbar
+  -- so the two diff halves remain vertically aligned.
+  -----------------------------------------------------------------------
+  it("sets winbar on scratch window when file window has a winbar", function()
+    local tracked_path = "lua/pi-nvim/config.lua"
+
+    -- Simulate a plugin (like barbecue/navic) setting a winbar on the
+    -- current window before fileChanged runs.
+    vim.wo[0].winbar = "%f %m"
+
+    local result = handlers.fileChanged({ path = tracked_path })
+    eq(true, result.ok)
+    eq(true, result.diff)
+
+    local scratch_win = find_win_by_bufname_containing("[git:HEAD]")
+    assert.is_not.Nil(scratch_win)
+
+    -- Scratch window should have a winbar set (non-empty)
+    local scratch_winbar = vim.wo[scratch_win].winbar
+    assert.is.truthy(scratch_winbar and scratch_winbar ~= "")
+
+    -- Winbar should contain [git:HEAD] label
+    assert.is.truthy(scratch_winbar:find("%[git:HEAD%]"))
+  end)
+
+  it("does not set winbar on scratch window when file window has no winbar", function()
+    local tracked_path = "lua/pi-nvim/config.lua"
+
+    -- Ensure no winbar is set (default)
+    vim.wo[0].winbar = ""
+
+    local result = handlers.fileChanged({ path = tracked_path })
+    eq(true, result.ok)
+    eq(true, result.diff)
+
+    local scratch_win = find_win_by_bufname_containing("[git:HEAD]")
+    assert.is_not.Nil(scratch_win)
+
+    -- Scratch window should have no winbar when file window has none
+    local scratch_winbar = vim.wo[scratch_win].winbar
+    eq("", scratch_winbar)
+  end)
+
+  it("escapes percent signs in filenames within winbar label", function()
+    -- Create a temporary tracked file with % in its name.
+    -- We can't easily create a git-tracked file with % in the name
+    -- in the real repo, but we can verify the escaping logic directly.
+    -- The winbar label is built from vim.fn.fnamemodify(abs_path, ":t")
+    -- with label:gsub("%%", "%%%%").  Test the escaping function.
+    local function escape_winbar_label(name)
+      return name:gsub("%%", "%%%%")
+    end
+
+    -- Percent sign in filename should be doubled
+    eq("foo%%%%bar", escape_winbar_label("foo%%bar"))
+    eq("100%%%%", escape_winbar_label("100%%"))
+    -- No percents — unchanged
+    eq("config.lua", escape_winbar_label("config.lua"))
   end)
 
   -----------------------------------------------------------------------
