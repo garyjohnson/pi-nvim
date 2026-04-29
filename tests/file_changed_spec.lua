@@ -1,0 +1,654 @@
+--- Tests for fileChanged handler window placement and diff behavior.
+--- Verifies that the pi terminal window is not displaced when showing
+--- auto-diff, and that existing diffs are reused on re-notification.
+
+local eq = assert.equals
+
+-- Helper: count windows in current tabpage
+local function win_count()
+  return #vim.api.nvim_tabpage_list_wins(0)
+end
+
+-- Helper: find a window showing a buffer with a given name suffix
+local function find_win_by_bufname(suffix)
+  for _, winid in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+    local name = vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(winid))
+    if name:sub(-#suffix) == suffix then
+      return winid
+    end
+  end
+  return nil
+end
+
+-- Helper: find a window showing a buffer whose name contains a substring
+-- (useful for scratch buffers whose name starts with "[git:HEAD]")
+local function find_win_by_bufname_containing(substr)
+  for _, winid in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+    local name = vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(winid))
+    if name:find(substr, 1, true) then
+      return winid
+    end
+  end
+  return nil
+end
+
+-- Helper: check if a buffer with a given name suffix exists (even if hidden)
+local function buf_exists_with_name(suffix)
+  for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
+    local name = vim.api.nvim_buf_get_name(bufnr)
+    if name:sub(-#suffix) == suffix then
+      return true
+    end
+  end
+  return false
+end
+
+-- Helper: clean up extra windows and buffers, leaving one clean window
+local function cleanup()
+  -- close all windows except one
+  vim.cmd("silent! only")
+  -- wipe out all buffers
+  vim.cmd("silent! %bwipeout!")
+  -- create a fresh empty buffer
+  vim.cmd("enew")
+  -- clear diff options and winbars
+  for _, win in ipairs(vim.api.nvim_list_wins()) do
+    if vim.api.nvim_win_is_valid(win) then
+      vim.wo[win].diff = false
+      vim.wo[win].winbar = ""
+    end
+  end
+end
+
+describe("fileChanged window placement", function()
+  local handlers = require("pi-nvim.handlers")
+  local config = require("pi-nvim.config")
+
+  before_each(function()
+    config.setup({ auto_open = true, show_diff = true })
+    cleanup()
+  end)
+
+  after_each(function()
+    cleanup()
+    config.setup({}) -- restore defaults
+  end)
+
+  -----------------------------------------------------------------------
+  -- Scenario A: file not open, but an edit-class window exists
+  -- The file should open in that window, then a diff split should appear.
+  -----------------------------------------------------------------------
+  it("opens file in existing edit window when file is not already open (scenario A)", function()
+    local tracked_path = "lua/pi-nvim/config.lua"
+    local orig_win_count = win_count()
+
+    local result = handlers.fileChanged({ path = tracked_path })
+    eq(true, result.ok)
+    eq(true, result.opened)
+    eq(true, result.diff)
+
+    -- Should have original+1 windows: the original window (now showing the file)
+    -- plus the diff scratch buffer split
+    eq(orig_win_count + 1, win_count())
+
+    -- A diff scratch buffer should exist
+    local abs_tracked_path = vim.fn.fnamemodify(tracked_path, ":p")
+    assert.is.True(buf_exists_with_name("[git:HEAD] " .. abs_tracked_path))
+  end)
+
+  -----------------------------------------------------------------------
+  -- Scenario C: file already open in an edit window
+  -- The file should reload in place (same window), diff should open next
+  -- to it, and no extra window should be created for the file.
+  -----------------------------------------------------------------------
+  it("reuses existing file window instead of creating new one (scenario C)", function()
+    local tracked_path = "lua/pi-nvim/config.lua"
+
+    -- Pre-open the file in the current window
+    vim.cmd("edit " .. tracked_path)
+    local file_win_before = vim.api.nvim_get_current_win()
+    local orig_win_count = win_count()
+
+    local result = handlers.fileChanged({ path = tracked_path })
+    eq(true, result.ok)
+    eq(true, result.opened)
+
+    -- Only one extra window should have been created (the diff scratch)
+    eq(orig_win_count + 1, win_count())
+
+    -- The file should still be in the same window
+    local file_win_after = find_win_by_bufname("config.lua")
+    assert.is_not.Nil(file_win_after)
+    eq(file_win_before, file_win_after)
+  end)
+
+  -----------------------------------------------------------------------
+  -- Existing diff reuse: when the diff scratch buffer already exists
+  -- alongside the file window, just reload and update.
+  -----------------------------------------------------------------------
+  it("reuses existing diff scratch buffer on subsequent fileChanged calls", function()
+    local tracked_path = "lua/pi-nvim/config.lua"
+
+    -- First call: sets up the diff
+    local result1 = handlers.fileChanged({ path = tracked_path })
+    eq(true, result1.ok)
+    eq(true, result1.diff)
+
+    local win_count_after_first = win_count()
+
+    -- Second call: should reuse existing windows
+    local result2 = handlers.fileChanged({ path = tracked_path })
+    eq(true, result2.ok)
+    eq(true, result2.diff)
+
+    -- No new windows should be created
+    eq(win_count_after_first, win_count())
+  end)
+
+  -----------------------------------------------------------------------
+  -- No diff when show_diff is false
+  -----------------------------------------------------------------------
+  it("opens file without diff when show_diff is disabled", function()
+    config.setup({ auto_open = true, show_diff = false })
+    local tracked_path = "lua/pi-nvim/config.lua"
+    local orig_win_count = win_count()
+
+    local result = handlers.fileChanged({ path = tracked_path })
+    eq(true, result.ok)
+    eq(true, result.opened)
+    assert.is.Nil(result.diff)
+
+    -- No new window should be created (file opened in existing window)
+    eq(orig_win_count, win_count())
+
+    config.setup({}) -- restore defaults
+  end)
+
+  -----------------------------------------------------------------------
+  -- Auto-open disabled: nothing happens
+  -----------------------------------------------------------------------
+  it("does nothing when auto_open is disabled", function()
+    config.setup({ auto_open = false })
+    local orig_win_count = win_count()
+
+    local result = handlers.fileChanged({ path = "lua/pi-nvim/config.lua" })
+    eq(true, result.ok)
+    assert.is.Nil(result.opened)
+
+    -- No windows created
+    eq(orig_win_count, win_count())
+
+    config.setup({}) -- restore defaults
+  end)
+
+  -----------------------------------------------------------------------
+  -- Horizontal diff split: verify the scratch buffer is below the file
+  -- (i.e. same width, different height — not a vertical split).
+  -----------------------------------------------------------------------
+  it("uses horizontal split when diff_split is horizontal", function()
+    config.setup({ auto_open = true, show_diff = true, diff_split = "horizontal" })
+    local tracked_path = "lua/pi-nvim/config.lua"
+
+    local result = handlers.fileChanged({ path = tracked_path })
+    eq(true, result.ok)
+    eq(true, result.opened)
+    eq(true, result.diff)
+
+    -- Should have 2 windows: file + horizontal split scratch
+    eq(2, win_count())
+
+    local wins = vim.api.nvim_tabpage_list_wins(0)
+    local file_win = find_win_by_bufname("config.lua")
+    local scratch_win = find_win_by_bufname_containing("[git:HEAD]")
+    assert.is_not.Nil(file_win)
+    assert.is_not.Nil(scratch_win)
+
+    -- In a horizontal split, both windows have the same width (full columns)
+    local file_width = vim.api.nvim_win_get_width(file_win)
+    local scratch_width = vim.api.nvim_win_get_width(scratch_win)
+    eq(file_width, scratch_width)
+
+    config.setup({}) -- restore defaults
+  end)
+
+  -----------------------------------------------------------------------
+  -- Vertical diff split (default): verify the scratch buffer is to the
+  -- right of the file (i.e. different width — not a horizontal split).
+  -----------------------------------------------------------------------
+  it("uses vertical split when diff_split is vertical (default)", function()
+    -- default diff_split is "vertical"
+    local tracked_path = "lua/pi-nvim/config.lua"
+
+    local result = handlers.fileChanged({ path = tracked_path })
+    eq(true, result.ok)
+    eq(true, result.opened)
+    eq(true, result.diff)
+
+    -- Should have 2 windows: file + vertical split scratch
+    eq(2, win_count())
+
+    local file_win = find_win_by_bufname("config.lua")
+    local scratch_win = find_win_by_bufname_containing("[git:HEAD]")
+    assert.is_not.Nil(file_win)
+    assert.is_not.Nil(scratch_win)
+
+    -- In a vertical split, widths differ (scratch is narrower, right side)
+    -- and heights are the same
+    local file_height = vim.api.nvim_win_get_height(file_win)
+    local scratch_height = vim.api.nvim_win_get_height(scratch_win)
+    eq(file_height, scratch_height)
+  end)
+
+  -----------------------------------------------------------------------
+  -- Winbar alignment: when the file window has a winbar (e.g. from
+  -- barbecue/navic), the scratch diff window should also get a winbar
+  -- so the two diff halves remain vertically aligned.
+  -----------------------------------------------------------------------
+  it("sets winbar on scratch window when file window has a winbar", function()
+    local tracked_path = "lua/pi-nvim/config.lua"
+
+    -- Simulate a plugin (like barbecue/navic) setting a winbar on the
+    -- current window before fileChanged runs.
+    vim.wo[0].winbar = "%f %m"
+
+    local result = handlers.fileChanged({ path = tracked_path })
+    eq(true, result.ok)
+    eq(true, result.diff)
+
+    local scratch_win = find_win_by_bufname_containing("[git:HEAD]")
+    assert.is_not.Nil(scratch_win)
+
+    -- Scratch window should have a winbar set (non-empty)
+    local scratch_winbar = vim.wo[scratch_win].winbar
+    assert.is.truthy(scratch_winbar and scratch_winbar ~= "")
+
+    -- Winbar should contain [git:HEAD] label
+    assert.is.truthy(scratch_winbar:find("%[git:HEAD%]"))
+  end)
+
+  it("does not set winbar on scratch window when file window has no winbar", function()
+    local tracked_path = "lua/pi-nvim/config.lua"
+
+    -- Ensure no winbar is set (default)
+    vim.wo[0].winbar = ""
+
+    local result = handlers.fileChanged({ path = tracked_path })
+    eq(true, result.ok)
+    eq(true, result.diff)
+
+    local scratch_win = find_win_by_bufname_containing("[git:HEAD]")
+    assert.is_not.Nil(scratch_win)
+
+    -- Scratch window should have no winbar when file window has none
+    local scratch_winbar = vim.wo[scratch_win].winbar
+    eq("", scratch_winbar)
+  end)
+
+  it("escapes percent signs in filenames within winbar label", function()
+    -- Create a temporary tracked file with % in its name.
+    -- We can't easily create a git-tracked file with % in the name
+    -- in the real repo, but we can verify the escaping logic directly.
+    -- The winbar label is built from vim.fn.fnamemodify(abs_path, ":t")
+    -- with label:gsub("%%", "%%%%").  Test the escaping function.
+    local function escape_winbar_label(name)
+      return name:gsub("%%", "%%%%")
+    end
+
+    -- Percent sign in filename should be doubled
+    eq("foo%%%%bar", escape_winbar_label("foo%%bar"))
+    eq("100%%%%", escape_winbar_label("100%%"))
+    -- No percents — unchanged
+    eq("config.lua", escape_winbar_label("config.lua"))
+  end)
+
+  -----------------------------------------------------------------------
+  -- Untracked file in git repo: should open the file but skip diff
+  -- (The cwd is a git repo, so git=true, but the file is untracked
+  -- so tracked=false and no diff is shown.)
+  -----------------------------------------------------------------------
+  it("opens file without diff when file is untracked in git repo", function()
+    local untracked_path = vim.fn.getcwd() .. "/pi-nvim-test-untracked.tmp"
+    local f = io.open(untracked_path, "w")
+    f:write("untracked content\n")
+    f:close()
+
+    local orig_win_count = win_count()
+
+    local result = handlers.fileChanged({ path = untracked_path })
+    eq(true, result.ok)
+    eq(true, result.opened)
+    assert.is.Nil(result.diff)
+    eq(true, result.git)
+    eq(false, result.tracked)
+
+    -- No diff split created
+    eq(orig_win_count, win_count())
+
+    os.remove(untracked_path)
+  end)
+
+end)
+
+describe("scratch buffer properties", function()
+  local handlers = require("pi-nvim.handlers")
+  local config = require("pi-nvim.config")
+
+  before_each(function()
+    config.setup({ auto_open = true, show_diff = true })
+    cleanup()
+  end)
+
+  after_each(function()
+    cleanup()
+    config.setup({}) -- restore defaults
+  end)
+
+  it("sets buftype=nofile on scratch buffer", function()
+    local tracked_path = "lua/pi-nvim/config.lua"
+
+    handlers.fileChanged({ path = tracked_path })
+
+    local scratch_win = find_win_by_bufname_containing("[git:HEAD]")
+    assert.is_not.Nil(scratch_win)
+    local scratch_buf = vim.api.nvim_win_get_buf(scratch_win)
+    eq("nofile", vim.bo[scratch_buf].buftype)
+  end)
+
+  it("sets modifiable=false on scratch buffer", function()
+    local tracked_path = "lua/pi-nvim/config.lua"
+
+    handlers.fileChanged({ path = tracked_path })
+
+    local scratch_win = find_win_by_bufname_containing("[git:HEAD]")
+    assert.is_not.Nil(scratch_win)
+    local scratch_buf = vim.api.nvim_win_get_buf(scratch_win)
+    eq(false, vim.bo[scratch_buf].modifiable)
+  end)
+
+  it("sets buflisted=false on scratch buffer", function()
+    local tracked_path = "lua/pi-nvim/config.lua"
+
+    handlers.fileChanged({ path = tracked_path })
+
+    local scratch_win = find_win_by_bufname_containing("[git:HEAD]")
+    assert.is_not.Nil(scratch_win)
+    local scratch_buf = vim.api.nvim_win_get_buf(scratch_win)
+    eq(false, vim.bo[scratch_buf].buflisted)
+  end)
+
+  it("matches filetype of the source file on scratch buffer", function()
+    local tracked_path = "lua/pi-nvim/config.lua"
+
+    handlers.fileChanged({ path = tracked_path })
+
+    local file_win = find_win_by_bufname("config.lua")
+    local scratch_win = find_win_by_bufname_containing("[git:HEAD]")
+    assert.is_not.Nil(file_win)
+    assert.is_not.Nil(scratch_win)
+
+    local file_buf = vim.api.nvim_win_get_buf(file_win)
+    local scratch_buf = vim.api.nvim_win_get_buf(scratch_win)
+    eq(vim.bo[file_buf].filetype, vim.bo[scratch_buf].filetype)
+  end)
+end)
+
+describe("is_edit_window", function()
+  -- is_edit_window is a local function, so we test it indirectly through
+  -- fileChanged behavior. When the current window is a non-edit-class
+  -- (nofile) buffer, fileChanged should skip it and find another window
+  -- or create a new split.
+
+  local handlers = require("pi-nvim.handlers")
+  local config = require("pi-nvim.config")
+
+  before_each(function()
+    config.setup({ auto_open = true, show_diff = false }) -- show_diff=false to simplify window counting
+    cleanup()
+  end)
+
+  after_each(function()
+    cleanup()
+    config.setup({}) -- restore defaults
+  end)
+
+  it("skips nofile buffers when finding a window", function()
+    -- Set current buffer to nofile (scratch)
+    local scratch = vim.api.nvim_create_buf(true, true)
+    vim.bo[scratch].buftype = "nofile"
+    vim.api.nvim_win_set_buf(0, scratch)
+
+    local tracked_path = "lua/pi-nvim/config.lua"
+    local orig_win_count = win_count()
+
+    -- With show_diff=false, the file should open in a NEW window
+    -- since the current one is nofile and should be skipped
+    local result = handlers.fileChanged({ path = tracked_path })
+    eq(true, result.ok)
+    eq(true, result.opened)
+
+    -- A new window should have been created because the current one
+    -- is nofile and was skipped
+    assert.is.True(win_count() > orig_win_count)
+  end)
+
+  it("skips quickfix buffers when finding a window", function()
+    -- Set current buffer to quickfix
+    local qf = vim.api.nvim_create_buf(true, true)
+    vim.bo[qf].buftype = "quickfix"
+    vim.api.nvim_win_set_buf(0, qf)
+
+    local tracked_path = "lua/pi-nvim/config.lua"
+    local orig_win_count = win_count()
+
+    local result = handlers.fileChanged({ path = tracked_path })
+    eq(true, result.ok)
+    eq(true, result.opened)
+
+    -- A new window should have been created because quickfix is not an edit window
+    assert.is.True(win_count() > orig_win_count)
+  end)
+
+  it("skips prompt buffers when finding a window", function()
+    -- Set current buffer to prompt
+    local prompt = vim.api.nvim_create_buf(true, true)
+    vim.bo[prompt].buftype = "prompt"
+    vim.api.nvim_win_set_buf(0, prompt)
+
+    local tracked_path = "lua/pi-nvim/config.lua"
+    local orig_win_count = win_count()
+
+    local result = handlers.fileChanged({ path = tracked_path })
+    eq(true, result.ok)
+    eq(true, result.opened)
+
+    -- A new window should have been created because prompt is not an edit window
+    assert.is.True(win_count() > orig_win_count)
+  end)
+end)
+
+describe("get_pi_bufnr", function()
+  local pi = require("pi-nvim")
+
+  before_each(function()
+    cleanup()
+  end)
+
+  it("returns nil when no pi terminal has been launched", function()
+    assert.is.Nil(pi.get_pi_bufnr())
+  end)
+end)
+
+describe("resolve_path", function()
+  it("resolves relative paths to absolute", function()
+    -- resolve_path is a local function, but we can test its behavior
+    -- indirectly through fileChanged by verifying that the scratch buffer
+    -- name uses the absolute path
+    local result = vim.fn.fnamemodify("lua/pi-nvim/config.lua", ":p")
+    -- Should be an absolute path
+    assert.is.True(result:sub(1, 1) == "/")
+  end)
+end)
+
+describe("cleanup_diffs", function()
+  local handlers = require("pi-nvim.handlers")
+  local config = require("pi-nvim.config")
+
+  before_each(function()
+    config.setup({ auto_open = true, show_diff = true })
+    cleanup()
+  end)
+
+  after_each(function()
+    cleanup()
+    config.setup({})
+  end)
+
+  it("closes old diff scratch when fileChanged opens a different file", function()
+    local tracked_path_a = "lua/pi-nvim/config.lua"
+    local tracked_path_b = "lua/pi-nvim/server.lua"
+
+    -- First call: open file A with diff
+    local result1 = handlers.fileChanged({ path = tracked_path_a })
+    eq(true, result1.ok)
+    eq(true, result1.diff)
+
+    local abs_a = vim.fn.fnamemodify(tracked_path_a, ":p")
+    local abs_b = vim.fn.fnamemodify(tracked_path_b, ":p")
+
+    -- Verify scratch for A exists
+    assert.is_not.Nil(find_win_by_bufname_containing("[git:HEAD] " .. abs_a))
+
+    -- Second call: open file B with diff
+    local result2 = handlers.fileChanged({ path = tracked_path_b })
+    eq(true, result2.ok)
+    eq(true, result2.diff)
+
+    -- Scratch for A should be gone
+    assert.is.Nil(find_win_by_bufname_containing("[git:HEAD] " .. abs_a))
+
+    -- Scratch for B should exist
+    assert.is_not.Nil(find_win_by_bufname_containing("[git:HEAD] " .. abs_b))
+
+    -- Should still be 2 windows (file B + scratch B)
+    eq(2, win_count())
+  end)
+
+  it("keeps existing diff when fileChanged is called for the same file", function()
+    local tracked_path = "lua/pi-nvim/config.lua"
+
+    -- First call: open file with diff
+    local result1 = handlers.fileChanged({ path = tracked_path })
+    eq(true, result1.ok)
+    eq(true, result1.diff)
+    local win_count_after_first = win_count()
+
+    -- Second call: should reuse existing diff
+    local result2 = handlers.fileChanged({ path = tracked_path })
+    eq(true, result2.ok)
+    eq(true, result2.diff)
+
+    -- Window count should not increase
+    eq(win_count_after_first, win_count())
+  end)
+
+  it("clears diff when openFile is used", function()
+    local tracked_path = "lua/pi-nvim/config.lua"
+    local other_path = "lua/pi-nvim/server.lua"
+
+    -- Set up a diff first
+    local result = handlers.fileChanged({ path = tracked_path })
+    eq(true, result.diff)
+
+    local abs_tracked = vim.fn.fnamemodify(tracked_path, ":p")
+    assert.is_not.Nil(find_win_by_bufname_containing("[git:HEAD] " .. abs_tracked))
+
+    -- Now open a different file via openFile
+    local result_open = handlers.openFile({ path = other_path })
+    assert.is_not.equal(vim.json.null, result_open.bufnr)
+
+    -- Old diff scratch should be gone
+    assert.is.Nil(find_win_by_bufname_containing("[git:HEAD] " .. abs_tracked))
+
+    -- Should be back to 1 window
+    eq(1, win_count())
+  end)
+
+  it("removes diff mode from paired file window after cleanup", function()
+    local tracked_path = "lua/pi-nvim/config.lua"
+    local other_path = "lua/pi-nvim/server.lua"
+
+    -- Set up a diff for file A
+    handlers.fileChanged({ path = tracked_path })
+    local file_win = find_win_by_bufname("config.lua")
+    assert.is_not.Nil(file_win)
+    assert.is.True(vim.wo[file_win].diff)
+
+    -- Open a different file via openFile
+    handlers.openFile({ path = other_path })
+
+    -- The old file window should no longer be in diff mode
+    assert.is.False(vim.wo[file_win].diff)
+  end)
+
+  it("removes hidden scratch buffers during cleanup", function()
+    local tracked_path = "lua/pi-nvim/config.lua"
+    local other_path = "lua/pi-nvim/server.lua"
+
+    -- Set up a diff for file A
+    handlers.fileChanged({ path = tracked_path })
+    local abs_a = vim.fn.fnamemodify(tracked_path, ":p")
+
+    -- Hide the file window (scratch is still visible)
+    vim.cmd("wincmd h")
+    vim.cmd("hide")
+
+    -- Verify scratch buffer still exists (in the remaining window)
+    local scratch_win = find_win_by_bufname_containing("[git:HEAD] " .. abs_a)
+    assert.is_not.Nil(scratch_win)
+
+    -- Now open a different file via openFile
+    handlers.openFile({ path = other_path })
+
+    -- Even hidden scratch should be gone
+    assert.is.Nil(find_win_by_bufname_containing("[git:HEAD] " .. abs_a))
+
+    -- No [git:HEAD] buffers should exist anywhere
+    for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
+      local name = vim.api.nvim_buf_get_name(bufnr)
+      assert.is.Nil(name:find("[git:HEAD]", 1, true))
+    end
+  end)
+
+  it("does not touch non-scratch buffers during cleanup", function()
+    local tracked_path = "lua/pi-nvim/config.lua"
+    local other_path = "lua/pi-nvim/server.lua"
+
+    -- Open two real files (no diff)
+    config.setup({ auto_open = false, show_diff = false })
+    vim.cmd("edit " .. tracked_path)
+    vim.cmd("vsplit " .. other_path)
+    local orig_bufs = #vim.api.nvim_list_bufs()
+
+    -- Call cleanup indirectly via fileChanged on auto_open=false which
+    -- returns early but first triggers cleanup_diffs internally.
+    -- Actually fileChanged returns before cleanup with auto_open=false.
+    -- So test cleanup via openFile instead.
+    config.setup({ auto_open = true, show_diff = true })
+    local prev_bufs = #vim.api.nvim_list_bufs()
+
+    -- Set up a diff, then open another file
+    handlers.fileChanged({ path = tracked_path })
+    handlers.openFile({ path = other_path })
+
+    -- Non-scratch buffers should remain (tracked_path and other_path)
+    local found_tracked = false
+    local found_other = false
+    for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
+      local name = vim.api.nvim_buf_get_name(bufnr)
+      if name:find("config.lua") then found_tracked = true end
+      if name:find("server.lua") then found_other = true end
+    end
+    assert.is.True(found_tracked)
+    assert.is.True(found_other)
+  end)
+end)

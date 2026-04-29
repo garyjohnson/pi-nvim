@@ -8,6 +8,7 @@ export const Methods = {
   BUF_CONTENT: "bufContent",
   SELECTION: "selection",
   OPEN_FILE: "openFile",
+  FILE_CHANGED: "fileChanged",
 } as const;
 
 export type MethodName = (typeof Methods)[keyof typeof Methods];

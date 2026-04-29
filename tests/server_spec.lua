@@ -105,4 +105,92 @@ describe("pi-nvim server", function()
     eq("table", type(result.buffers))
     eq("table", type(result.windows))
   end)
+
+  it("fileChanged returns error for missing path", function()
+    local result = handlers.fileChanged({})
+    assert.is_not.Nil(result.__nvim_error)
+    eq(-32602, result.__nvim_error.code)
+  end)
+
+  it("fileChanged returns error for empty path", function()
+    local result = handlers.fileChanged({ path = "" })
+    assert.is_not.Nil(result.__nvim_error)
+    eq(-32602, result.__nvim_error.code)
+  end)
+
+  it("fileChanged returns error for path with pipe", function()
+    local result = handlers.fileChanged({ path = "evil|ls" })
+    assert.is_not.Nil(result.__nvim_error)
+    eq(-32602, result.__nvim_error.code)
+  end)
+
+  it("fileChanged returns error for path with newline", function()
+    local result = handlers.fileChanged({ path = "foo.lua\nmalicious" })
+    assert.is_not.Nil(result.__nvim_error)
+    eq(-32602, result.__nvim_error.code)
+  end)
+
+  it("fileChanged returns error for path with carriage return", function()
+    local result = handlers.fileChanged({ path = "foo.lua\rmalicious" })
+    assert.is_not.Nil(result.__nvim_error)
+    eq(-32602, result.__nvim_error.code)
+  end)
+
+  it("fileChanged returns ok when auto_open is disabled", function()
+    local config = require("pi-nvim.config")
+    config.setup({ auto_open = false })
+
+    local result = handlers.fileChanged({ path = "/tmp/pi-nvim-test-filechanged.lua" })
+    eq(true, result.ok)
+
+    -- Restore defaults
+    config.setup({})
+  end)
+
+  it("fileChanged opens file without diff when show_diff is disabled", function()
+    local config = require("pi-nvim.config")
+    config.setup({ auto_open = true, show_diff = false })
+
+    local result = handlers.fileChanged({ path = "/tmp/pi-nvim-test-no-diff.lua" })
+    eq(true, result.ok)
+    eq(true, result.opened)
+    assert.is.Nil(result.diff)
+
+    -- Restore defaults
+    config.setup({})
+  end)
+
+  it("fileChanged sets up diffthis for tracked files in a git repo", function()
+    -- Use an existing tracked file from this repo
+    local tracked_path = "lua/pi-nvim/config.lua"
+
+    -- Save window state for cleanup
+    local orig_wins = vim.api.nvim_list_wins()
+    local orig_win = vim.api.nvim_get_current_win()
+    local orig_buf = vim.api.nvim_win_get_buf(orig_win)
+
+    local result = handlers.fileChanged({ path = tracked_path })
+
+    eq(true, result.ok)
+    eq(true, result.opened)
+    eq(true, result.diff)
+
+    -- Clean up: close any new windows, clear diff, restore original buffer
+    for _, win in ipairs(vim.api.nvim_list_wins()) do
+      if not vim.tbl_contains(orig_wins, win) then
+        vim.api.nvim_win_close(win, true)
+      end
+    end
+
+    -- Restore original window and buffer
+    vim.api.nvim_set_current_win(orig_win)
+    if vim.api.nvim_win_is_valid(orig_win) then
+      vim.api.nvim_win_set_buf(orig_win, orig_buf)
+    end
+
+    -- Clear diff option in case it leaked
+    for _, win in ipairs(vim.api.nvim_list_wins()) do
+      vim.wo[win].diff = false
+    end
+  end)
 end)
